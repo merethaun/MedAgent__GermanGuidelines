@@ -1,99 +1,19 @@
-# start with: docker-compose -p medagent up -d
 services:
-  # Backend (FastAPI)
   backend:
     build:
       context: ../backend
       dockerfile: ../docker/backend.Dockerfile
-      args:
-        MODE: build
     container_name: medagent-backend
     working_dir: /src
     ports:
-      - "5001:5000"
+      - "5000:5000"
     environment:
-      - MONGODB_URI=mongodb://mongo:mongo@medagent-mongodb:27017
-      - WEAVIATE_URL=http://medagent-weaviate:8080
-      - GRPC_WEAVIATE_URL=http://medagent-weaviate:50051
-      - GUIDELINE_PDFS_FOLDER=${GUIDELINE_PDFS_FOLDER}
-      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
-      - AZURE_OPENAI_API_BASE=${AZURE_OPENAI_API_BASE}
-      - OPEN_AI_TYPE=${OPEN_AI_TYPE}
-      - WARHOL_OLLAMA_API_BASE=${WARHOL_OLLAMA_API_BASE}
-      - MEDAGENT_EVALUATION_DB=${MEDAGENT_EVALUATION_DB}
-      # point app-visible HF dir to the mounted cache (not the baked /models)
-      - MEDAGENT_HF_DATA_DIR=/models-cache
-      - HIERARCHICAL_WEAVIATE_INDEX_LOCATION=${HIERARCHICAL_WEAVIATE_INDEX_LOCATION}
-      # transformers / HF cache goes to the mounted cache
-      - HF_HOME=/models-cache
-      - HUGGINGFACE_HUB_CACHE=/models-cache
-      # BERTScore uses the baked model path inside the image
-      - BERTSCORE_MODEL_PATH=/models/xlm-roberta-large
-      - MODE=build
+      MODE: build   # change to "update" when needed
     volumes:
       - ../backend/src:/src
-      - ${GUIDELINE_PDFS_FOLDER}:/data
-      - ${MEDAGENT_HF_DATA_DIR}:/models-cache
-      - ${HIERARCHICAL_WEAVIATE_INDEX_LOCATION}:/hierarchy_index_data:rw
-    depends_on:
-      mongodb:
-        condition: service_healthy
-      weaviate:
-        condition: service_healthy
-      neo4j:
-        condition: service_healthy
     networks:
       - backend
-
-  # MongoDB Database
-  mongodb:
-    image: mongo:6.0
-    container_name: medagent-mongodb
-    ports:
-      - "27017:27017"
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=mongo
-      - MONGO_INITDB_ROOT_PASSWORD=mongo
-      - MEDAGENT_MONGODB_DATA_DIR=${MEDAGENT_MONGODB_DATA_DIR}
-    volumes:
-      - ${MEDAGENT_MONGODB_DATA_DIR}:/data/db
-    healthcheck:
-      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 512g
-    networks:
-      - backend
-
-  weaviate: # other options: https://www.datacamp.com/blog/the-top-5-vector-databases, Melvis already used in other papers
-    image: cr.weaviate.io/semitechnologies/weaviate:1.30.0
-    container_name: medagent-weaviate
-    ports:
-      - "8082:8080"
-      - "50052:50051"
-    environment:
-      - QUERY_DEFAULTS_LIMIT=25
-      - AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED='true'
-      - PERSISTENCE_DATA_PATH=/var/lib/weaviate
-      - ENABLE_API_BASED_MODULES='true'
-      - CLUSTER_HOSTNAME='node1'
-      - MEDAGENT_WEAVIATE_DATA_DIR=${MEDAGENT_WEAVIATE_DATA_DIR}
-    volumes:
-      - ${MEDAGENT_WEAVIATE_DATA_DIR}:/var/lib/weaviate:rw
-    restart: on-failure:0
-    networks:
-      - backend
-    healthcheck:
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:8080/v1/.well-known/ready" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
 networks:
   backend:
     driver: bridge
-
