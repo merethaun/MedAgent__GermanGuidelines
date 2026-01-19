@@ -8,11 +8,27 @@ services:
     ports:
       - "5000:5000"
     environment:
-      MODE: build   # change to "update" when needed
+      MODE: update   # "build" or "update"
+      BACKEND_LOG__FILE_PATH: /logs/backend.log
+      OIDC_ISSUER: http://keycloak:8080/realms/medagent
+      OIDC_AUDIENCE: medagent-frontend
+      OIDC_VERIFY_AUDIENCE: "false"
+      KEYCLOAK_REALM: medagent
+      KEYCLOAK_CLIENT_ID: medagent-frontend
     volumes:
       - ../backend/src:/src
+      - ../logs/backend:/logs
     networks:
       - backend
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "python -c \"import os,requests; iss=os.getenv('OIDC_ISSUER','').rstrip('/'); u=f'{iss}/protocol/openid-connect/certs'; r=requests.get(u,timeout=3); r.raise_for_status(); print('ok')\"" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   keycloak-db:
     image: postgres:16
@@ -24,11 +40,13 @@ services:
     volumes:
       - ./data/keycloak:/var/lib/postgresql/data
     restart: unless-stopped
+    networks:
+      - backend
 
   keycloak:
     image: quay.io/keycloak/keycloak:25.0
     container_name: medagent-keycloak
-    command: start-dev
+    command: [ "start", "--http-enabled=true", "--hostname-strict=false" ]
     depends_on:
       - keycloak-db
     environment:
@@ -40,7 +58,15 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
     ports:
       - "8080:8080"
-    restart: unless-stopped
+      - "9000:9000"
+    healthcheck:
+      test: [ "CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000" ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    networks:
+      - backend
 
 networks:
   backend:
