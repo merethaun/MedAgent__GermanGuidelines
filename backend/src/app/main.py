@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.controllers import auth_router, test_router
+from app.controllers.knowledge.guideline import guideline_router
 from app.services.service_registry import init_services
 
 
@@ -32,6 +33,9 @@ main_app.add_middleware(
 
 main_app.include_router(auth_router, prefix="/auth", tags=["Auth"])
 main_app.include_router(test_router, prefix="/test", tags=["Test"])
+
+# Knowledge setup
+main_app.include_router(guideline_router, prefix="/guidelines", tags=["Guidelines"])
 
 if __name__ == "__main__":
     import uvicorn

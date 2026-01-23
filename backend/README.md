@@ -52,19 +52,30 @@ Controllers should contain **minimal logic**.
 ```text
 src/app/
 ├── models/        # Pydantic models, schemas, domain objects
-│   └── auth /
-│       └── token.py, user.py
+│   ├── auth /
+│   │   └── token.py, user.py
+│   ├── common /                # including object id
+│   └── knowledge /
+│       └── guideline /
+│           └── guideline_entry.py
 ├── services/      # Business logic (auth, workflows, evaluation, ...)
 │   ├── service_registry.py     # collecting all services (singleton pattern)
-│   └── auth /
-│       ├── auth_service.py     # validate user credentials
-│       └── token_service.py    # create token
+│   ├── auth /
+│   │   ├── auth_service.py     # validate user credentials
+│   │   └── token_service.py    # create token
+│   └── knowledge /
+│       └── guideline /
+│           └── guideline_service.py    # including pdf download
 ├── controllers/   # FastAPI routers / HTTP endpoints
 │   ├── auth /                  # for getting auth tokens
-│   └── dependencies /          # for authentication (as dependency injected)
+│   ├── dependencies /          # for authentication (as dependency injected)
+│   └── knowledge /
+│       └── guideline /
+│           └── guideline_router.py
 ├── utils/         # Shared helpers (logging, service factories, etc.)
 ├── constants/     # Centralized configuration (via environment variables)
 │   ├── logging_config.py
+│   ├── mongodb_config.py
 │   └── auth_config.py
 └── main.py        # FastAPI app setup and router registration
 ```
@@ -80,8 +91,9 @@ At the current stage, the backend provides:
 - Keycloak-based authentication
 - Role-based access control (`admin`, `study_user`)
 - A development-only token endpoint (`/auth/token`)
+- MongoDB interaction and PDF download for guideline entries
 
-Database integration, RAG pipelines, and evaluation logic will be added incrementally.
+Full database integration, RAG pipelines, and evaluation logic will be added incrementally.
 
 ---
 

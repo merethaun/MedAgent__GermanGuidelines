@@ -14,7 +14,8 @@ class TokenService:
     Dev/testing helper. Do NOT log passwords.
     """
     
-    def create_token(self, username: str, password: str, timeout_s: int = 10) -> TokenResponse:
+    @staticmethod
+    def create_token(username: str, password: str, timeout_s: int = 10) -> TokenResponse:
         if not OIDC_ISSUER:
             raise ValueError("OIDC_ISSUER is not set")
         

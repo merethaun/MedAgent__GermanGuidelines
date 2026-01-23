@@ -15,13 +15,19 @@ services:
       OIDC_VERIFY_AUDIENCE: "false"
       KEYCLOAK_REALM: medagent
       KEYCLOAK_CLIENT_ID: medagent-frontend
+      MONGODB_URI: mongodb://${MONGODB_ROOT_USERNAME}:${MONGODB_ROOT_PASSWORD}@medagent-mongodb:27017
+      MONGODB_DB_NAME: ${MONGODB_DB_NAME}
+      GUIDELINE_PDF_FOLDER: /data/guidelines/pdfs
     volumes:
       - ../backend/src:/src
       - ../logs/backend:/logs
+      - ../data/guideline_pdf:/data
     networks:
       - backend
     depends_on:
       keycloak:
+        condition: service_healthy
+      mongodb:
         condition: service_healthy
     healthcheck:
       test: [ "CMD-SHELL", "python -c \"import os,requests; iss=os.getenv('OIDC_ISSUER','').rstrip('/'); u=f'{iss}/protocol/openid-connect/certs'; r=requests.get(u,timeout=3); r.raise_for_status(); print('ok')\"" ]
@@ -38,7 +44,7 @@ services:
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
     volumes:
-      - ./data/keycloak:/var/lib/postgresql/data
+      - ../data/keycloak:/var/lib/postgresql/data
     restart: unless-stopped
     networks:
       - backend
@@ -67,6 +73,26 @@ services:
       start_period: 40s
     networks:
       - backend
+
+  mongodb:
+    image: mongo:8.0
+    container_name: medagent-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_ROOT_PASSWORD}
+    volumes:
+      - ../data/mongodb-data:/data/db
+    healthcheck:
+      test: [ "CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+
 
 networks:
   backend:

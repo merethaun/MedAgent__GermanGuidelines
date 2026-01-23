@@ -4,9 +4,7 @@ import jwt
 import requests
 from jwt.algorithms import RSAAlgorithm
 
-from app.constants.auth_config import (
-    OIDC_ISSUER, OIDC_AUDIENCE, OIDC_JWKS_URL, OIDC_VERIFY_AUDIENCE,
-)
+from app.constants import auth_config
 from app.models.auth import CurrentUser
 from app.utils.logging import setup_logger
 
@@ -18,38 +16,52 @@ class AuthService:
         self._jwks_cache: Optional[dict] = None
     
     def _get_jwks(self) -> dict:
-        if not OIDC_JWKS_URL:
+        jwks_url = auth_config.OIDC_JWKS_URL
+        if not jwks_url:
             raise RuntimeError("OIDC_JWKS_URL / OIDC_ISSUER not configured")
+        
         if self._jwks_cache is None:
-            r = requests.get(OIDC_JWKS_URL, timeout=5)
+            r = requests.get(jwks_url, timeout=5)
             r.raise_for_status()
             self._jwks_cache = r.json()
         return self._jwks_cache
     
     @staticmethod
     def _extract_roles(payload: dict) -> Set[str]:
-        roles = set(payload.get("realm_access", {}).get("roles", []))
-        return roles
+        return set(payload.get("realm_access", {}).get("roles", []))
     
     def decode_and_validate(self, token: str) -> CurrentUser:
         jwks = self._get_jwks()
+        
+        issuer = auth_config.OIDC_ISSUER
+        verify_aud = auth_config.OIDC_VERIFY_AUDIENCE
+        audience = auth_config.OIDC_AUDIENCE
         
         try:
             header = jwt.get_unverified_header(token)
             kid = header.get("kid")
             key = next(k for k in jwks["keys"] if k["kid"] == kid)
             
+            options = {
+                "require": ["exp", "iss"],
+                "verify_aud": False,  # <-- default: do NOT verify aud
+            }
+            
             decode_kwargs = dict(
                 key=RSAAlgorithm.from_jwk(key),
                 algorithms=["RS256"],
-                issuer=OIDC_ISSUER,
-                options={"require": ["exp", "iss"]},
+                issuer=issuer,
+                options=options,
             )
             
-            if OIDC_VERIFY_AUDIENCE:
-                decode_kwargs["audience"] = OIDC_AUDIENCE
+            if verify_aud:
+                if not audience:
+                    raise RuntimeError("OIDC_VERIFY_AUDIENCE=true but OIDC_AUDIENCE is empty")
+                decode_kwargs["audience"] = audience
+                decode_kwargs["options"]["verify_aud"] = True  # <-- explicitly enable
             
             payload = jwt.decode(token, **decode_kwargs)
+        
         except Exception as e:
             logger.warning(f"Token validation failed: {e}")
             raise
