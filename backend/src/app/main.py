@@ -4,7 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.controllers import auth_router, test_router
-from app.controllers.knowledge.guideline import guideline_router
+from app.controllers.knowledge.guideline import guideline_reference_router, guideline_router
+from app.controllers.tools import tool_router
 from app.services.service_registry import init_services
 
 
@@ -36,6 +37,10 @@ main_app.include_router(test_router, prefix="/test", tags=["Test"])
 
 # Knowledge setup
 main_app.include_router(guideline_router, prefix="/guidelines", tags=["Guidelines"])
+main_app.include_router(guideline_reference_router, prefix="/guideline_references", tags=["GuidelineReferences"])
+
+# Tool testing
+main_app.include_router(tool_router, prefix="/tools", tags=["Tools"])
 
 if __name__ == "__main__":
     import uvicorn

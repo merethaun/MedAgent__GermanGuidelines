@@ -10,3 +10,8 @@ cryptography>=41
 
 # For MongoDB
 pymongo
+
+# For tools
+yake # keyword
+litellm # llm interaction
+

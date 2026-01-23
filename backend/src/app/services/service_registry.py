@@ -1,14 +1,19 @@
 from typing import Optional
 
-from app.utils.mongo_collection_setup import init_mongo, get_collection
+from app.constants.mongodb_config import GUIDELINE_COLLECTION, GUIDELINE_REFERENCE_COLLECTION, GUIDELINE_REFERENCE_GROUP_COLLECTION
+from app.utils.mongo_collection_setup import get_collection, init_mongo
 from .auth import AuthService, TokenService
-from .knowledge.guideline import GuidelineService
-from ..constants.mongodb_config import GUIDELINE_COLLECTION
+from .knowledge.guideline import GuidelineReferenceService, GuidelineService
+from .tools import KeywordService, LLMInteractionService
 
 _auth_service: Optional[AuthService] = None
 _token_service: Optional[TokenService] = TokenService()
 
 _guideline_service: Optional[GuidelineService] = None
+_guideline_reference_service: Optional[GuidelineReferenceService] = None
+
+_keyword_service: Optional[KeywordService] = None
+_llm_interaction_service: Optional[LLMInteractionService] = None
 
 
 def init_services() -> None:
@@ -28,6 +33,21 @@ def init_services() -> None:
     global _guideline_service
     if _guideline_service is None:
         _guideline_service = GuidelineService(guideline_collection=get_collection(GUIDELINE_COLLECTION))
+    
+    global _guideline_reference_service
+    if _guideline_reference_service is None:
+        _guideline_reference_service = GuidelineReferenceService(
+            reference_groups_collection=get_collection(GUIDELINE_REFERENCE_GROUP_COLLECTION),
+            reference_collection=get_collection(GUIDELINE_REFERENCE_COLLECTION),
+        )
+    
+    global _keyword_service
+    if _keyword_service is None:
+        _keyword_service = KeywordService()
+    
+    global _llm_interaction_service
+    if _llm_interaction_service is None:
+        _llm_interaction_service = LLMInteractionService()
 
 
 def get_auth_service() -> AuthService:
@@ -53,3 +73,27 @@ def get_guideline_service() -> GuidelineService:
         init_services()
     assert _guideline_service is not None
     return _guideline_service
+
+
+def get_guideline_reference_service() -> GuidelineReferenceService:
+    global _guideline_reference_service
+    if _guideline_reference_service is None:
+        init_services()
+    assert _guideline_reference_service is not None
+    return _guideline_reference_service
+
+
+def get_keyword_service() -> KeywordService:
+    global _keyword_service
+    if _keyword_service is None:
+        init_services()
+    assert _keyword_service is not None
+    return _keyword_service
+
+
+def get_llm_interaction_service() -> LLMInteractionService:
+    global _llm_interaction_service
+    if _llm_interaction_service is None:
+        init_services()
+    assert _llm_interaction_service is not None
+    return _llm_interaction_service
