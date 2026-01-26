@@ -1,9 +1,14 @@
 from typing import Optional
 
-from app.constants.mongodb_config import GUIDELINE_COLLECTION, GUIDELINE_REFERENCE_COLLECTION, GUIDELINE_REFERENCE_GROUP_COLLECTION
+from app.constants.mongodb_config import (
+    CHAT_COLLECTION, GUIDELINE_COLLECTION, GUIDELINE_REFERENCE_COLLECTION, GUIDELINE_REFERENCE_GROUP_COLLECTION,
+    WORKFLOW_SYSTEM_COLLECTION,
+)
 from app.utils.mongo_collection_setup import get_collection, init_mongo
 from .auth import AuthService, TokenService
 from .knowledge.guideline import GuidelineReferenceService, GuidelineService
+from .system import WorkflowSystemInteractionService, WorkflowSystemStorageService
+from .system.chat import ChatService
 from .tools import KeywordService, LLMInteractionService
 
 _auth_service: Optional[AuthService] = None
@@ -14,6 +19,10 @@ _guideline_reference_service: Optional[GuidelineReferenceService] = None
 
 _keyword_service: Optional[KeywordService] = None
 _llm_interaction_service: Optional[LLMInteractionService] = None
+
+_workflow_storage_service: Optional[WorkflowSystemStorageService] = None
+_workflow_interaction_service: Optional[WorkflowSystemInteractionService] = None
+_chat_service: Optional[ChatService] = None
 
 
 def init_services() -> None:
@@ -48,6 +57,18 @@ def init_services() -> None:
     global _llm_interaction_service
     if _llm_interaction_service is None:
         _llm_interaction_service = LLMInteractionService()
+    
+    global _workflow_storage_service
+    if _workflow_storage_service is None:
+        _workflow_storage_service = WorkflowSystemStorageService(get_collection(WORKFLOW_SYSTEM_COLLECTION))
+    
+    global _workflow_interaction_service
+    if _workflow_interaction_service is None:
+        _workflow_interaction_service = WorkflowSystemInteractionService(_workflow_storage_service)
+    
+    global _chat_service
+    if _chat_service is None:
+        _chat_service = ChatService(chat_collection=get_collection(CHAT_COLLECTION), workflow_interaction_service=_workflow_interaction_service)
 
 
 def get_auth_service() -> AuthService:
@@ -97,3 +118,27 @@ def get_llm_interaction_service() -> LLMInteractionService:
         init_services()
     assert _llm_interaction_service is not None
     return _llm_interaction_service
+
+
+def get_workflow_storage_service() -> WorkflowSystemStorageService:
+    global _workflow_storage_service
+    if _workflow_storage_service is None:
+        init_services()
+    assert _workflow_storage_service is not None
+    return _workflow_storage_service
+
+
+def get_workflow_interaction_service() -> WorkflowSystemInteractionService:
+    global _workflow_interaction_service
+    if _workflow_interaction_service is None:
+        init_services()
+    assert _workflow_interaction_service is not None
+    return _workflow_interaction_service
+
+
+def get_chat_service() -> ChatService:
+    global _chat_service
+    if _chat_service is None:
+        init_services()
+    assert _chat_service is not None
+    return _chat_service

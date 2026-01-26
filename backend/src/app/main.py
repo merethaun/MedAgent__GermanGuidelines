@@ -3,8 +3,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# Required to link all components together
+# noinspection PyUnusedImports
+import app.services.system.components.component_registry
+# Other local imports
 from app.controllers import auth_router, test_router
 from app.controllers.knowledge.guideline import guideline_reference_router, guideline_router
+from app.controllers.system import system_router
 from app.controllers.tools import tool_router
 from app.services.service_registry import init_services
 
@@ -41,6 +46,9 @@ main_app.include_router(guideline_reference_router, prefix="/guideline_reference
 
 # Tool testing
 main_app.include_router(tool_router, prefix="/tools", tags=["Tools"])
+
+# Workflow system setup and interaction
+main_app.include_router(system_router, prefix="/system", tags=["WorkflowSystems"])
 
 if __name__ == "__main__":
     import uvicorn

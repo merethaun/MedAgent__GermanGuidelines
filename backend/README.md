@@ -45,51 +45,125 @@ Defines the FastAPI routers and endpoints:
 
 Controllers should contain **minimal logic**.
 
+### Exception layer (cross-cutting)
+
+Defines domain-specific exceptions that can be raised from services and translated into
+consistent HTTP errors in controllers.
+
 ---
 
 ## Project structure
 
 ```text
 src/app/
-├── models/        # Pydantic models, schemas, domain objects
-│   ├── auth /
-│   │   └── token.py, user.py
-│   ├── common /                # including object id
-│   ├── knowledge /
-│   │   └── guideline /
-│   │       ├── guideline_entry.py
-│   │       └── guideline_reference.py
-│   └── tools /
-│       ├── keyword_interaction.py
-│       └── llm_interaction.py
-├── services/      # Business logic (auth, workflows, evaluation, ...)
-│   ├── service_registry.py     # collecting all services (singleton pattern)
-│   ├── auth /
-│   │   ├── auth_service.py     # validate user credentials
-│   │   └── token_service.py    # create token
-│   ├── knowledge /
-│   │   └── guideline /
-│   │       ├── guideline_service.py    # including pdf download
-│   │       └── guideline_reference_service.py  # including reference groups
-│   └── tools /
-│       ├── keyword_service.py
-│       └── llm_interaction_service.py
+├── constants/     # Centralized configuration (via environment variables)
+│   ├── auth_config.py
+│   ├── logging_constants.py
+│   └── mongodb_config.py
 ├── controllers/   # FastAPI routers / HTTP endpoints
-│   ├── auth /                  # for getting auth tokens
-│   ├── dependencies /          # for authentication (as dependency injected)
+│   ├── auth /
+│   │   ├── auth_router.py
+│   │   └── __init__.py
+│   ├── dependencies /
+│   │   ├── auth_dependencies.py
+│   │   └── __init__.py
 │   ├── knowledge /
 │   │   └── guideline /
 │   │       ├── guideline_router.py
-│   │       └── guideline_reference_router.py
+│   │       ├── guideline_reference_router.py
+│   │       └── __init__.py
+│   ├── system /
+│   │   ├── system_router.py
+│   │   └── __init__.py
 │   └── tools /
-│       └── tool_router.py      # admin-only tool endpoints (keywords, llm sessions)
+│       ├── tools_test_router.py
+│       └── __init__.py
+├── exceptions/    # Domain-specific exceptions
+│   ├── knowledge /
+│   │   └── guideline /
+│   │       ├── guideline_error.py
+│   │       ├── guideline_reference_error.py
+│   │       └── __init__.py
+│   ├── system /
+│   │   └── chat /
+│   │       ├── chat_error.py
+│   │       └── __init__.py
+│   └── tools /
+│       ├── llm_interaction_error.py
+│       └── __init__.py
+├── models/        # Pydantic models, schemas, domain objects
+│   ├── auth /
+│   │   ├── token.py
+│   │   ├── user.py
+│   │   └── __init__.py
+│   ├── common /
+│   │   ├── py_object_id.py
+│   │   └── __init__.py
+│   ├── knowledge /
+│   │   └── guideline /
+│   │       ├── guideline_entry.py
+│   │       ├── guideline_reference.py
+│   │       └── __init__.py
+│   ├── system /
+│   │   ├── system_chat_interaction.py
+│   │   ├── workflow_system.py
+│   │   └── __init__.py
+│   └── tools /
+│       ├── keyword_interaction.py
+│       ├── llm_interaction.py
+│       └── __init__.py
+├── services/      # Business logic (auth, workflows, evaluation, ...)
+│   ├── service_registry.py
+│   ├── auth /
+│   │   ├── auth_service.py
+│   │   ├── token_service.py
+│   │   └── __init__.py
+│   ├── knowledge /
+│   │   └── guideline /
+│   │       ├── guideline_service.py              # incl. PDF download
+│   │       ├── guideline_reference_service.py    # incl. reference groups
+│   │       └── __init__.py
+│   ├── system /
+│   │   ├── workflow_system_interaction_service.py
+│   │   ├── workflow_system_storage_service.py
+│   │   ├── chat /
+│   │   │   ├── chat_service.py
+│   │   │   └── __init__.py
+│   │   └── components /
+│   │       ├── abstract_component.py
+│   │       ├── component_registry.py
+│   │       └── structure /
+│   │           ├── start_component.py
+│   │           ├── end_component.py
+│   │           └── __init__.py
+│   └── tools /
+│       ├── keyword_service.py
+│       ├── llm_interaction_service.py
+│       └── __init__.py
 ├── utils/         # Shared helpers (logging, service factories, etc.)
-├── constants/     # Centralized configuration (via environment variables)
-│   ├── logging_config.py
-│   ├── mongodb_config.py
-│   └── auth_config.py
+│   ├── llm_client.py
+│   ├── logging.py
+│   ├── mongo_collection_setup.py
+│   └── system /
+│       ├── render_template.py
+│       ├── resolve_component_path.py
+│       └── __init__.py
 └── main.py        # FastAPI app setup and router registration
 ```
+
+### Available system workflow components
+
+System workflows are built from **components**. All components inherit from
+[`AbstractComponent`](src/app/services/system/components/abstract_component.py) and are registered via:
+
+- `AbstractComponent.variants = {"start": StartComponent, "end": EndComponent}`
+
+The currently available component variants are:
+
+| Variant name | Component class                                                                     | Description / Purpose                                                               |
+|--------------|-------------------------------------------------------------------------------------|:------------------------------------------------------------------------------------|
+| `start`      | [`StartComponent`](src/app/services/system/components/structure/start_component.py) | Required as start to provide user input                                             |
+| `end`        | [`EndComponent`](src/app/services/system/components/structure/end_component.py)     | Required as end to define generator output (text) and retrieval result (references) |
 
 ---
 
@@ -103,9 +177,11 @@ At the current stage, the backend provides:
 - Role-based access control (`admin`, `study_user`)
 - A development-only token endpoint (`/auth/token`)
 - MongoDB interaction and PDF download for guideline entries
+- A basic system/chat scaffolding (router + service + models) for the simplified setup
 - Admin-only tool endpoints for:
     - Keyword extraction (YAKE, LLM, and comparison of both)
     - LLM interaction sessions (create session with LLM settings, chat continuation via session id, history/reset)
+    - Deletion functions and creation / update for workflows, guidelines, and references
 
 Full database integration, RAG pipelines, and evaluation logic will be added incrementally.
 
