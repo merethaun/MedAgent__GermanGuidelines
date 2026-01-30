@@ -7,10 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 # noinspection PyUnusedImports
 import app.services.system.components.component_registry
 # Other local imports
-from app.controllers import auth_router, test_router
+from app.controllers import auth_router, system_router, tool_router
 from app.controllers.knowledge.guideline import guideline_reference_router, guideline_router
-from app.controllers.system import system_router
-from app.controllers.tools import tool_router
 from app.services.service_registry import init_services
 
 
@@ -38,7 +36,6 @@ main_app.add_middleware(
 )
 
 main_app.include_router(auth_router, prefix="/auth", tags=["Auth"])
-main_app.include_router(test_router, prefix="/test", tags=["Test"])
 
 # Knowledge setup
 main_app.include_router(guideline_router, prefix="/guidelines", tags=["Guidelines"])
