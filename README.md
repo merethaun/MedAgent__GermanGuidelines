@@ -64,7 +64,7 @@ The backend Docker image supports **two run modes**, controlled via the environm
 ### MODE=build
 
 - Production-like mode
-- Multiple Uvicorn workers
+- Still 1 worker!
 - No auto-reload
 
 The mode is configured once when the container is started.

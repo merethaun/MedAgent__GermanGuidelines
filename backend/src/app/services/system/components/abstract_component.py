@@ -1,9 +1,16 @@
 import copy
 import time
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Type
 
 from app.models.system.system_chat_interaction import WorkflowComponentExecutionResult
+
+
+@dataclass(frozen=True)
+class ComponentContext:
+    wf_id: str
+    llm_interaction_service: Any  # LLMInteractionService (keep Any to avoid import cycles)
 
 
 class AbstractComponent(ABC):
@@ -32,11 +39,24 @@ class AbstractComponent(ABC):
         self.id = component_id
         self.name = name
         self._variant = variant or "base"
+        self.next_component_id: Optional[str] = None
+        
+        self.context: Optional[ComponentContext] = None
         
         merged_params = copy.deepcopy(self.default_parameters)
         if parameters:
             merged_params.update(parameters)
         self.parameters = merged_params
+    
+    def bind_context(self, context: ComponentContext) -> None:
+        """
+        Called by WorkflowRuntime after component instantiation.
+        Components can ignore it if they don't need shared services.
+        """
+        self.context = context
+    
+    def set_next_component(self, next_component_id: str):
+        self.next_component_id = next_component_id
     
     @classmethod
     def get_output_spec(cls) -> Dict[str, Dict[str, Any]]:
@@ -62,10 +82,6 @@ class AbstractComponent(ABC):
         super().__init_subclass__(**kwargs)
         if variant_name:
             AbstractComponent.variants[variant_name] = cls
-    
-    @abstractmethod
-    def set_next_component(self, next_component_id: str):
-        pass
     
     @abstractmethod
     def load_execution_result(self, result: WorkflowComponentExecutionResult):

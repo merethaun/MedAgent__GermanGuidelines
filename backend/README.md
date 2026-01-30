@@ -160,10 +160,11 @@ System workflows are built from **components**. All components inherit from
 
 The currently available component variants are:
 
-| Variant name | Component class                                                                     | Description / Purpose                                                               |
-|--------------|-------------------------------------------------------------------------------------|:------------------------------------------------------------------------------------|
-| `start`      | [`StartComponent`](src/app/services/system/components/structure/start_component.py) | Required as start to provide user input                                             |
-| `end`        | [`EndComponent`](src/app/services/system/components/structure/end_component.py)     | Required as end to define generator output (text) and retrieval result (references) |
+| Variant name | Component class                                                                       | Description / Purpose                                                                                                                                                                                               |
+|--------------|---------------------------------------------------------------------------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `start`      | [`StartComponent`](./src/app/services/system/components/structure/start_component.py) | Required as start to provide user input                                                                                                                                                                             |
+| `end`        | [`EndComponent`](./src/app/services/system/components/structure/end_component.py)     | Required as end to define generator output (text) and retrieval result (references)                                                                                                                                 |
+| `generator`  | [`LLMGenerator`](./src/app/services/system/components/generator/generator.py)         | Executes the actual text generation step by sending a resolved prompt to the configured LLM and returning the model response. The LLM is configured via [`LLMSettings`](./src/app/models/tools/llm_interaction.py). |
 
 ---
 

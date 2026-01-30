@@ -1,7 +1,10 @@
 from typing import Optional
 
 from app.constants.mongodb_config import (
-    CHAT_COLLECTION, GUIDELINE_COLLECTION, GUIDELINE_REFERENCE_COLLECTION, GUIDELINE_REFERENCE_GROUP_COLLECTION,
+    CHAT_COLLECTION,
+    GUIDELINE_COLLECTION,
+    GUIDELINE_REFERENCE_COLLECTION,
+    GUIDELINE_REFERENCE_GROUP_COLLECTION,
     WORKFLOW_SYSTEM_COLLECTION,
 )
 from app.utils.mongo_collection_setup import get_collection, init_mongo
@@ -64,7 +67,7 @@ def init_services() -> None:
     
     global _workflow_interaction_service
     if _workflow_interaction_service is None:
-        _workflow_interaction_service = WorkflowSystemInteractionService(_workflow_storage_service)
+        _workflow_interaction_service = WorkflowSystemInteractionService(_workflow_storage_service, _llm_interaction_service)
     
     global _chat_service
     if _chat_service is None:

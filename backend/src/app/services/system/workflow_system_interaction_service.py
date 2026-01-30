@@ -2,11 +2,13 @@ import math
 import time
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.models.system.system_chat_interaction import Chat, RetrievalResult, WorkflowComponentExecutionResult
 from app.models.system.workflow_system import WorkflowConfig
+from app.services.system.components.abstract_component import ComponentContext
 from app.services.system.workflow_system_storage_service import WorkflowSystemStorageService
+from app.services.tools import LLMInteractionService
 from app.utils.logging import setup_logger
 from app.utils.system.render_template import render_template
 from app.utils.system.resolve_component_path import resolve_component_path
@@ -19,6 +21,7 @@ class WorkflowSystemInteractionService:
     """Build a runtime from a stored WorkflowConfig and execute it for a given chat."""
     
     storage: WorkflowSystemStorageService
+    llm_interaction_service: LLMInteractionService
     
     def generate_response(
             self,
@@ -26,11 +29,14 @@ class WorkflowSystemInteractionService:
             chat: Chat,
     ) -> Tuple[str, List[RetrievalResult], float, float, List[WorkflowComponentExecutionResult]]:
         wf = self.storage.get_workflow_by_id(wf_id)
-        
         runtime = WorkflowRuntime(
             wf_id=wf_id,
             config=WorkflowConfig(name=wf.name, nodes=wf.nodes, edges=wf.edges),
             deepcopy_params=True,
+            context=ComponentContext(
+                wf_id=wf_id,
+                llm_interaction_service=self.llm_interaction_service,
+            ),
         )
         
         # Restore component state from previous interactions (everything except the new last prompt).
@@ -53,6 +59,7 @@ class WorkflowRuntime:
     max_steps: int = 100
     
     components: Dict[str, Any] = field(default_factory=dict)
+    context: Optional[ComponentContext] = None
     
     def __post_init__(self) -> None:
         self._build_components()
@@ -137,6 +144,7 @@ class WorkflowRuntime:
     # Build runtime graph
     # -------------------------
     def _build_components(self) -> None:
+        
         self.components = {}
         
         for node in self.config.nodes:
@@ -150,6 +158,10 @@ class WorkflowRuntime:
                 parameters=params,
                 variant=component_path[-1],
             )
+            
+            if self.context is not None:
+                instance.bind_context(self.context)
+            
             self.components[node.component_id] = instance
         
         # Early sanity (optional but very helpful)

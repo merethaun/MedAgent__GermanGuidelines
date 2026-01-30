@@ -18,7 +18,7 @@ CMD if [ "$MODE" = "update" ]; then \
       uvicorn app.main:main_app --host 0.0.0.0 --port 5000 --reload --loop asyncio; \
     elif [ "$MODE" = "build" ]; then \
       echo "Running in build mode"; \
-      uvicorn app.main:main_app --host 0.0.0.0 --port 5000 --workers 5 --loop asyncio; \
+      uvicorn app.main:main_app --host 0.0.0.0 --port 5000 --workers 1 --loop asyncio; \
     else \
       echo "Unknown MODE: $MODE. Please set MODE=update or MODE=build."; \
       exit 1; \

@@ -13,8 +13,7 @@ from app.services.service_registry import init_services
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
+async def lifespan(fast_app: FastAPI):
     init_services()
     yield
 
