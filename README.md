@@ -7,16 +7,16 @@ The setup is intentionally minimal (not full repo) and evolves incrementally.
 
 ---
 
-## Current state (backend + authentication)
+## Current state (backend + authentication + frontend)
 
 At this stage, the stack contains:
 
 - **Backend (FastAPI)** – runnable via Docker
 - **Authentication (Keycloak)** – user management and role-based access control
+- **Frontend (React SPA)** – minimal UI scaffold (login + placeholder pages)
 
 Not included yet:
 
-- frontend
 - databases (MongoDB, Weaviate, etc.)
 - model caching or preprocessing pipelines
 
@@ -36,7 +36,7 @@ cp local.env .env
 
 ---
 
-### 2) Start backend + Keycloak
+### 2) Start backend + Keycloak + frontend
 
 ```bash
 docker compose -p medagent --env-file .env up -d --build
@@ -48,6 +48,15 @@ docker compose -p medagent --env-file .env up -d --build
 
 - Backend Swagger UI: http://localhost:5000/docs
 - Keycloak Admin UI: http://localhost:8080/admin
+- Frontend (React): http://localhost:5173
+
+---
+
+## Frontend pages (current scaffold)
+
+- **/login** – login/logout via Keycloak
+- **/chats** – placeholder (list old chats + create chat)
+- **/chat/:chatId** – placeholder (chat interaction + references)
 
 ---
 
@@ -76,8 +85,37 @@ The mode is configured once when the container is started.
 - **FastAPI backend:** http://localhost:5000
     - Swagger UI: http://localhost:5000/docs
 - **Keycloak Admin UI:** http://localhost:8080/admin
+- **React frontend:** http://localhost:5173
 
 ---
+
+## Setup keycloak instance
+
+1) Open Keycloak Admin UI
+   [http://localhost:8080/admin](http://localhost:8080/admin)
+   Log in using `KEYCLOAK_ADMIN_USER` / `KEYCLOAK_ADMIN_PASSWORD`.
+
+2) Select (or create) the realm **medagent**
+
+3) Ensure realm roles exist:
+    - `admin`
+    - `study_user`
+
+4) Ensure `medagent-frontend` is stored as a client:
+    - Create a client with ID `medagent-frontend`
+    - Settings:
+        - Client type: OpenID Connect
+        - Client ID: `medagent-frontend`
+        - Name: `MedAgent Frontend (SPA)`
+        - Description: `React SPA for MedAgent using Authorization Code Flow + PKCE (public client).`
+        - Standard flow: enabled
+        - Root URL: `http://localhost:5173`
+        - Home URL: `http://localhost:5173`
+        - Valid redirect URIs: `http://localhost:5173/*`
+        - Valid post logout redirect URIs: `http://localhost:5173/*`
+        - Web origins: `http://localhost:5173`
+        - Admin URL: `http://localhost:5173`
+        - *Note: keep all other client capabilities / flows at their default (disabled) so the client behaves as a public SPA (Code + PKCE only).*
 
 ## Keycloak persistence
 
@@ -98,21 +136,17 @@ As long as this folder exists, all users and settings survive container restarts
    http://localhost:8080/admin  
    Log in using `KEYCLOAK_ADMIN_USER` / `KEYCLOAK_ADMIN_PASSWORD`.
 
-2) Select (or create) the realm **medagent**
+2) Follow the [setup](#setup-keycloak-instance)
 
-3) Ensure realm roles exist:
-    - `admin`
-    - `study_user`
-
-4) Create a user:
+3) Create a user:
     - **Users** → **Add user**
     - Set **Username** → **Create**
 
-5) Set password:
+4) Set password:
     - **Credentials** → **Set password**
     - Set **Temporary = OFF**
 
-6) Assign role:
+5) Assign role:
     - **Role mapping**
     - Assign either `admin` or `study_user`
 
@@ -133,5 +167,4 @@ Planned next steps:
 - MongoDB and Weaviate integration
 - RAG workflow execution
 - guideline ingestion pipelines
-- minimal React-based frontend
 - evaluation and benchmarking components

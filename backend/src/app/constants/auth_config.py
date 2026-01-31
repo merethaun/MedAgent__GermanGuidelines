@@ -1,6 +1,7 @@
 import os
 
 OIDC_ISSUER = os.getenv("OIDC_ISSUER", "")
+OIDC_ALLOWED_ISSUERS = os.getenv("OIDC_ALLOWED_ISSUERS", "")
 OIDC_AUDIENCE = os.getenv("OIDC_AUDIENCE", "")
 
 OIDC_JWKS_URL = os.getenv(

@@ -28,7 +28,7 @@ main_app = FastAPI(
 # Allow cross-origin requests so that the frontend can access the API from a different port
 main_app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins in development
+    allow_origins=["*"],  # TODO: maybe replace with "http://localhost:5173"
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
