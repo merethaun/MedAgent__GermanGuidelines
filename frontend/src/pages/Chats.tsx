@@ -19,14 +19,17 @@ import {
   Typography,
 } from "@mui/material";
 
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+
 import {type Chat, normalizeObjectId, useSystemApi} from "../api/system";
+import ChatCreator from "../components/ChatCreator";
 
 const DEBUG = true; // set to false when done
 
 function fmtTime(iso?: string | null): string | undefined {
   if (!iso) return undefined;
-  // Best-effort: show ISO or a short local time.
-  // If you want Berlin local formatting with date+time, we can adjust.
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
@@ -42,7 +45,6 @@ function lastInteractionSummary(chat: Chat): { label: string; time?: string } {
 
   const time = fmtTime(last.time_response_output ?? last.time_question_input);
 
-  // Prefer showing the question; optionally include whether response exists
   const q = (last.user_input ?? "").trim();
   const hasAnswer = !!(last.generator_output && last.generator_output.trim().length > 0);
   const prefix = hasAnswer ? "" : "[no answer] ";
@@ -55,6 +57,8 @@ export default function ChatsPage() {
   const auth = useAuth() as any;
   const navigate = useNavigate();
   const {listChats, getWorkflowById} = useSystemApi();
+
+  const [showCreator, setShowCreator] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -168,11 +172,42 @@ export default function ChatsPage() {
           >
             Reload
           </Button>
-          <Button variant="contained" disabled sx={{textTransform: "none"}}>
+
+          <Button
+            variant="contained"
+            color="success"
+            onClick={() => setShowCreator(true)}
+            disabled={!(auth.initialized && auth.authenticated)}
+            sx={{textTransform: "none"}}
+          >
             New chat
           </Button>
         </Stack>
       </Stack>
+
+      {/* Pop-up chat creator */}
+      <Dialog
+        open={showCreator}
+        onClose={() => setShowCreator(false)}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle sx={{fontWeight: 800}}>
+          <Typography variant="h5" sx={{fontWeight: 800}}>New chat</Typography>
+        </DialogTitle>
+        <DialogContent dividers>
+          <ChatCreator
+            onCancel={() => setShowCreator(false)}
+            onCreated={async (created) => {
+              setShowCreator(false);
+              await loadOnce();
+
+              const id = normalizeObjectId((created as any)._id);
+              if (id) navigate(`/chat/${id}`);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
 
       {error && <Alert severity="error">{error}</Alert>}
 

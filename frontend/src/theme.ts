@@ -1,9 +1,8 @@
-// src/theme.ts
 import {alpha, createTheme} from "@mui/material/styles";
 
 export const UI = {
-  navbarTintAlpha: 0.04,   // navbar background tint strength
-  tabSelectedAlpha: 0.14,  // selected tab pill strength
+  navbarTintAlpha: 0.04,
+  tabSelectedAlpha: 0.14,
 };
 
 export const theme = createTheme({
@@ -12,15 +11,49 @@ export const theme = createTheme({
   },
   shape: {borderRadius: 12},
 
+  palette: {
+    mode: "light",
+
+    // Teal primary
+    primary: {
+      main: "#008489",        // teal 600
+      light: "#32babf",       // teal 300
+      dark: "#045b5e",        // teal 800
+      contrastText: "#FFFFFF",
+    },
+
+    // Some other accent color
+    secondary: {
+      main: "#5C6BC0",        // indigo 400
+      light: "#9FA8DA",       // indigo 200
+      dark: "#3949AB",        // indigo 600
+      contrastText: "#FFFFFF",
+    },
+
+    // Orange
+    warning: {
+      main: "#FF7300FF",
+    },
+
+    // Green (used via color="success")
+    success: {
+      main: "#2E7D32",
+      contrastText: "#FFFFFF",
+    },
+
+    // Optional: nicer default surfaces
+    background: {
+      default: "#FAFAFA",
+      paper: "#FFFFFF",
+    },
+  },
+
   components: {
-    // Hide the default indicator line (we use a pill background instead)
     MuiTabs: {
       styleOverrides: {
         indicator: {height: 0},
       },
     },
-
-    // Global tab styling (nice for nav tabs; tweak if you use tabs elsewhere)
     MuiTab: {
       styleOverrides: {
         root: ({theme}) => ({
