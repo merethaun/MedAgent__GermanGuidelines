@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -199,6 +200,10 @@ def create_chat_for_workflow(
     
     # Force the workflow_system_id to match the path
     initial_chat.workflow_system_id = wf_id
+    if initial_chat.name is None:
+        now = datetime.now().astimezone()
+        formatted_time = now.strftime("%Y-%m-%d %H:%M")
+        initial_chat.name = f"Chat ({formatted_time})"
     
     try:
         return chat_service.create_chat_entry(initial_chat)

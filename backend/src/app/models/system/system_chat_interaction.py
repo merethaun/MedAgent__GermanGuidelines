@@ -69,6 +69,7 @@ class ChatInteraction(BaseModel):
 
 class Chat(BaseModel):
     id: Optional[PyObjectId] = Field(default=None, alias="_id", description="MongoDB document ID")
+    name: Optional[str] = Field(default=None, description="Chat name, ideally including brief description")
     workflow_system_id: PyObjectId = Field(description="Related / utilized workflow system (MongoDB document ID)")
     username: str = Field(default="No user", description="Username of the sender")
     interactions: List[ChatInteraction] = Field(default_factory=list)

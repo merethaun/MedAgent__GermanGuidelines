@@ -36,11 +36,12 @@ services:
       MODE: update   # "build" or "update"
       BACKEND_LOG__FILE_PATH: /logs/backend.log
       OIDC_ALLOWED_ISSUERS: "http://localhost:8080/realms/medagent,http://keycloak:8080/realms/medagent"
+      OIDC_ISSUER: http://keycloak:8080/realms/medagent
       OIDC_JWKS_URL: "http://keycloak:8080/realms/medagent/protocol/openid-connect/certs"
-      OIDC_AUDIENCE: medagent-frontend
+      OIDC_AUDIENCE: medagent-backend
       OIDC_VERIFY_AUDIENCE: "false"
       KEYCLOAK_REALM: medagent
-      KEYCLOAK_CLIENT_ID: medagent-frontend
+      KEYCLOAK_CLIENT_ID: medagent-backend
       MONGODB_URI: mongodb://${MONGODB_ROOT_USERNAME}:${MONGODB_ROOT_PASSWORD}@medagent-mongodb:27017
       MONGODB_DB_NAME: ${MONGODB_DB_NAME}
       GUIDELINE_PDF_FOLDER: /data/guidelines/pdfs

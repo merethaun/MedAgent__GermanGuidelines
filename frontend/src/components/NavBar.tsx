@@ -1,4 +1,4 @@
-import {Link as RouterLink, useLocation} from "react-router-dom";
+import {Link as RouterLink, matchPath, useLocation} from "react-router-dom";
 import {useAuth} from "../auth/AuthContext";
 
 import {AppBar, Box, Button, Tab, Tabs, Toolbar, Typography} from "@mui/material";
@@ -9,12 +9,18 @@ export default function NavBar() {
   const auth = useAuth();
   const location = useLocation();
 
+  // Only “on a chat” when the current route matches /chat/:chatId
+  const chatMatch = matchPath("/chat/:chatId", location.pathname);
+  const chatId = chatMatch?.params?.chatId;
+
   const currentTab =
     location.pathname === "/login"
       ? "/login"
-      : location.pathname === "/chats" || location.pathname.startsWith("/chat/")
-        ? "/chats"
-        : false;
+      : chatMatch
+        ? "/chat"
+        : location.pathname === "/chats"
+          ? "/chats"
+          : false;
 
   return (
     <AppBar
@@ -58,8 +64,17 @@ export default function NavBar() {
             "& .MuiTabs-flexContainer": {gap: 0.5},
           }}
         >
+          {/* Order: Login, then Chats, then optional Chat interaction */}
+          <Tab label="Login" value="/login" component={RouterLink} to="/login"/>
           <Tab label="Chats" value="/chats" component={RouterLink} to="/chats"/>
-          <Tab label="Login Page" value="/login" component={RouterLink} to="/login"/>
+          {chatId ? (
+            <Tab
+              label="Chat interaction"
+              value="/chat"
+              component={RouterLink}
+              to={`/chat/${chatId}`}
+            />
+          ) : null}
         </Tabs>
 
         <Box sx={{flexGrow: 1}}/>
