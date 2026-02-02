@@ -2,11 +2,10 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import {useNavigate, useParams} from "react-router-dom";
 
 import CloseIcon from "@mui/icons-material/Close";
-import {Alert, Box, Button, CircularProgress, Divider, Slider, Stack, Typography,} from "@mui/material";
+import {Alert, Box, Button, CircularProgress, Container, Stack, Typography, useTheme} from "@mui/material";
 import IconButton from "@mui/material/IconButton";
 
 import Dialog from "@mui/material/Dialog";
-import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 
@@ -29,18 +28,18 @@ const DEBUG = false;
  * - One fixed wrapper width (can exceed viewport)
  * - One fixed reference width (split handle)
  */
-const DEFAULT_FIXED_MAX_HEIGHT_PX = 760;
-const DEFAULT_WRAPPER_WIDTH_PX = 1600;
-const DEFAULT_REFERENCE_WIDTH_PX = 420;
+const DEFAULT_FIXED_MAX_HEIGHT = "75vh";
+const DEFAULT_WRAPPER_WIDTH = "lg";
+const DEFAULT_REFERENCE_WIDTH = "30%";
 
-const MIN_FIXED_HEIGHT_PX = 320;
-const MAX_FIXED_HEIGHT_PX = 2600;
+const MIN_FIXED_HEIGHT = "25vh";
+const MAX_FIXED_HEIGHT = "100vh";
 
-const MIN_REFERENCE_WIDTH_PX = 320;
-const MAX_REFERENCE_WIDTH_PX = 780;
+const MIN_REFERENCE_WIDTH = "20%";
+const MAX_REFERENCE_WIDTH = "75%";
 
-const MIN_WRAPPER_WIDTH_PX = 900;
-const MAX_WRAPPER_WIDTH_PX = 3600;
+const MIN_WRAPPER_WIDTH = "lg";
+const MAX_WRAPPER_WIDTH = "90vw";
 
 const HANDLE_HIT_PX = 12;
 const HANDLE_GRAB_THICKNESS_PX = 4;
@@ -48,6 +47,58 @@ const HANDLE_GRAB_LENGTH_PX = 54;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
+}
+
+function parsePercentToRatio(spec: string): number {
+  const s = (spec ?? "").trim();
+  if (!s) return 0;
+
+  if (s.endsWith("%")) {
+    const v = parseFloat(s.slice(0, -1));
+    return Number.isFinite(v) ? v / 100 : 0;
+  }
+
+  // Allow raw ratio strings, e.g. "0.3"
+  const v = parseFloat(s);
+  if (!Number.isFinite(v)) return 0;
+
+  // If someone passes "30" assume percent.
+  return v > 1 ? v / 100 : v;
+}
+
+type BreakpointKey = "xs" | "sm" | "md" | "lg" | "xl";
+
+function isBreakpointKey(s: string): s is BreakpointKey {
+  return s === "xs" || s === "sm" || s === "md" || s === "lg" || s === "xl";
+}
+
+function resolveCssPx(
+  spec: string | number,
+  _axis: "x" | "y",
+  viewport: { w: number; h: number },
+  themeBreakpointValues: Record<BreakpointKey, number>,
+  basePx?: number,
+): number {
+  if (typeof spec === "number") return spec;
+
+  const s = (spec ?? "").trim();
+  if (!s) return 0;
+
+  if (isBreakpointKey(s)) return themeBreakpointValues[s];
+
+  const num = parseFloat(s);
+  if (!Number.isFinite(num)) return 0;
+
+  if (s.endsWith("px")) return num;
+  if (s.endsWith("vw")) return (viewport.w * num) / 100;
+  if (s.endsWith("vh")) return (viewport.h * num) / 100;
+  if (s.endsWith("%")) {
+    if (basePx == null) return 0;
+    return (basePx * num) / 100;
+  }
+
+  // Fallback: treat as px-ish number string.
+  return num;
 }
 
 function GrabBar({orientation}: { orientation: "vertical" | "horizontal" }) {
@@ -66,145 +117,11 @@ function GrabBar({orientation}: { orientation: "vertical" | "horizontal" }) {
   );
 }
 
-type PreviewFocus = "height" | "width" | "refs" | null;
-
-function LayoutPreview(props: {
-  wrapperWidthPx: number;
-  fixedMaxHeightPx: number;
-  referenceWidthPx: number;
-  focus: PreviewFocus;
-  maxW?: number; // preview box max width
-  maxH?: number; // preview box max height
-}) {
-  const {
-    wrapperWidthPx,
-    fixedMaxHeightPx,
-    referenceWidthPx,
-    focus,
-    maxW = 260,
-    maxH = 160,
-  } = props;
-
-  const w = Math.max(1, wrapperWidthPx);
-  const h = Math.max(1, fixedMaxHeightPx);
-  const refW = Math.max(0, Math.min(referenceWidthPx, w));
-  const chatW = Math.max(0, w - refW);
-
-  // Scale content down so it always fits in preview bounds.
-  const scale = Math.min(maxW / w, maxH / h, 1);
-
-  const outline = (isOn: boolean) => ({
-    outline: isOn ? "2px solid" : "1px solid",
-    outlineColor: isOn ? "primary.main" : "divider",
-  });
-
-  return (
-    <Box
-      sx={{
-        width: maxW,
-        height: maxH,
-        borderColor: "divider",
-        p: 1,
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-        gap: 0.75,
-        flexShrink: 0,
-      }}
-    >
-      {/* The scaled “mini-map” */}
-      <Box sx={{position: "relative", width: "100%", flex: 1, overflow: "hidden"}}>
-        <Box
-          sx={{
-            position: "absolute",
-            left: "50%",
-            top: 0,
-            transform: `translateX(-50%) scale(${scale})`,
-            transformOrigin: "top center",
-            width: w,
-            height: h,
-            borderRadius: 1.5,
-            bgcolor: "background.paper",
-            ...outline(focus === "width" || focus === "height"),
-          }}
-        >
-          {/* Chat area */}
-          <Box
-            sx={{
-              position: "absolute",
-              left: 0,
-              top: 0,
-              width: chatW,
-              height: h,
-              borderRadius: "6px 0 0 6px",
-              bgcolor: "action.hover",
-              ...(focus === "width" ? outline(true) : {}),
-              outlineOffset: -1,
-            }}
-          />
-
-          {/* Reference panel */}
-          <Box
-            sx={{
-              position: "absolute",
-              right: 0,
-              top: 0,
-              width: refW,
-              height: h,
-              borderRadius: "0 6px 6px 0",
-              bgcolor: "action.selected",
-              ...outline(focus === "refs"),
-              outlineOffset: -1,
-            }}
-          />
-
-          {/* Middle divider (ref resize handle position) */}
-          <Box
-            sx={{
-              position: "absolute",
-              left: chatW - 1,
-              top: 0,
-              width: 2,
-              height: h,
-              bgcolor: focus === "refs" ? "primary.main" : "divider",
-              opacity: focus === "refs" ? 1 : 0.8,
-            }}
-          />
-
-          {/* Bottom “height handle” indicator */}
-          <Box
-            sx={{
-              position: "absolute",
-              left: "20%",
-              bottom: 6,
-              width: "60%",
-              height: 6,
-              borderRadius: 999,
-              bgcolor: focus === "height" ? "primary.main" : "divider",
-              opacity: focus === "height" ? 1 : 0.9,
-            }}
-          />
-        </Box>
-      </Box>
-
-      {/* Dimensions (kept tiny) */}
-      <Box sx={{display: "flex", justifyContent: "space-between", gap: 1}}>
-        <Typography variant="caption" sx={{opacity: 0.8}}>
-          {Math.round(w)}×{Math.round(h)} px
-        </Typography>
-        <Typography variant="caption" sx={{opacity: 0.8}}>
-          refs: {Math.round(refW)} px
-        </Typography>
-      </Box>
-    </Box>
-  );
-}
-
-
 // -------------------- Page component --------------------
 
 export default function ChatInteractionPage() {
   const auth = useAuth() as any;
+  const theme = useTheme();
   const navigate = useNavigate();
   const {chatId: rawChatId} = useParams();
 
@@ -224,51 +141,75 @@ export default function ChatInteractionPage() {
 
   const username: string | undefined = auth.username;
 
+  // --- Viewport (for vh/vw constraints) ---
+  const [viewport, setViewport] = useState(() => ({
+    w: typeof window !== "undefined" ? window.innerWidth : 0,
+    h: typeof window !== "undefined" ? window.innerHeight : 0,
+  }));
+
+  useEffect(() => {
+    const onResize = () => setViewport({w: window.innerWidth, h: window.innerHeight});
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const bp = theme.breakpoints.values as Record<BreakpointKey, number>;
+
   // --- Layout state ---
-  const [showLayout, setShowLayout] = useState(false);
-  const [previewFocus, setPreviewFocus] = useState<PreviewFocus>(null);
 
-  // Height: one fixed *max* height (defaults to "fills the rest of the page")
-  const [autoFitHeight, setAutoFitHeight] = useState(true);
-  const [fixedMaxHeightPx, setFixedMaxHeightPx] = useState(DEFAULT_FIXED_MAX_HEIGHT_PX);
-
-  // Width: one fixed wrapper width (can exceed viewport)
-  const [wrapperWidthPx, setWrapperWidthPx] = useState(DEFAULT_WRAPPER_WIDTH_PX);
-
-  // Split: fixed reference width
-  const [referenceWidthPx, setReferenceWidthPx] = useState(DEFAULT_REFERENCE_WIDTH_PX);
-
-  // Scroll container (used when wrapperWidthPx > available width)
+  // Refs used by resize logic
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  // Height: fixed *max* height
+  const [autoFitHeight, setAutoFitHeight] = useState(true);
+  const minFixedHeightPx = Math.max(0, resolveCssPx(MIN_FIXED_HEIGHT, "y", viewport, bp));
+  const [fixedMaxHeightPx, setFixedMaxHeightPx] = useState<number>(() =>
+    Math.max(minFixedHeightPx, resolveCssPx(DEFAULT_FIXED_MAX_HEIGHT, "y", viewport, bp)),
+  );
+
+  // Width: wrapper width in px (defaults to a breakpoint width like "lg")
+  const [wrapperWidthPx, setWrapperWidthPx] = useState<number>(() =>
+    Math.max(0, resolveCssPx(DEFAULT_WRAPPER_WIDTH, "x", viewport, bp)),
+  );
+
+  // Split: reference width as a ratio of the wrapper content width
+  const [referenceWidthRatio, setReferenceWidthRatio] = useState<number>(() =>
+    parsePercentToRatio(DEFAULT_REFERENCE_WIDTH),
+  );
+
+  // Scroll padding (used when wrapperWidthPx > available width)
   const [scrollPadPx, setScrollPadPx] = useState(0);
 
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  // --- Derived constraints (resolved from responsive specs) ---
+  const maxFixedHeightPx = Math.max(minFixedHeightPx, resolveCssPx(MAX_FIXED_HEIGHT, "y", viewport, bp));
+  const maxWrapperWidthPx = Math.max(0, resolveCssPx(MAX_WRAPPER_WIDTH, "x", viewport, bp));
+  const minWrapperFromSpecPx = Math.max(0, resolveCssPx(MIN_WRAPPER_WIDTH, "x", viewport, bp));
 
-  const dragWrapperState = useRef<{
-    startX: number;
-    startW: number;
-    side: "left" | "right";
-    minW: number;
-  } | null>(null);
+  const minRefRatio = clamp(parsePercentToRatio(MIN_REFERENCE_WIDTH), 0, 0.99);
+  const maxRefRatio = clamp(parsePercentToRatio(MAX_REFERENCE_WIDTH), 0.01, 1);
 
   const MIN_CHAT_COL_PX = 360;
   const HANDLE_COL_PX = HANDLE_HIT_PX;
+  const HANDLE_TOTAL_PX = HANDLE_COL_PX * 3;
 
-  // Wrapper must be wide enough for: chat + middle handle + refs
-  const minWrapperWidthPx = Math.max(
-    MIN_WRAPPER_WIDTH_PX,
-    MIN_CHAT_COL_PX +
-    HANDLE_COL_PX +
-    clamp(referenceWidthPx, MIN_REFERENCE_WIDTH_PX, MAX_REFERENCE_WIDTH_PX),
+  const referenceRatioClamped = clamp(referenceWidthRatio, minRefRatio, maxRefRatio);
+
+  // Wrapper must be wide enough so the *chat* can still reach MIN_CHAT_COL_PX.
+  // We treat the reference ratio as a ratio of the content width (wrapper minus handles).
+  const minWrapperForChatPx = Math.ceil(
+    HANDLE_TOTAL_PX + MIN_CHAT_COL_PX / Math.max(0.05, 1 - referenceRatioClamped),
   );
 
-  // Keep wrapper wide enough when refs width changes.
-  useEffect(() => {
-    setWrapperWidthPx((w) => clamp(w, minWrapperWidthPx, MAX_WRAPPER_WIDTH_PX));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [minWrapperWidthPx]);
+  const minWrapperWidthPx = Math.max(minWrapperFromSpecPx, minWrapperForChatPx);
 
-  // Auto-fit: choose a sensible initial max height that fills the rest of the viewport.
+  // Keep wrapper within bounds whenever constraints change (e.g., viewport resize).
+  useEffect(() => {
+    setWrapperWidthPx((w) => clamp(w, minWrapperWidthPx, maxWrapperWidthPx));
+  }, [minWrapperWidthPx, maxWrapperWidthPx]);
+
+  // Auto-fit: choose a sensible max height that fills the rest of the viewport.
   useEffect(() => {
     if (!autoFitHeight) return;
 
@@ -276,8 +217,8 @@ export default function ChatInteractionPage() {
       const el = panelRef.current;
       if (!el) return;
       const top = el.getBoundingClientRect().top;
-      const available = Math.floor(window.innerHeight - top - 16);
-      setFixedMaxHeightPx(clamp(available, MIN_FIXED_HEIGHT_PX, MAX_FIXED_HEIGHT_PX));
+      const available = Math.floor(viewport.h - top - 16);
+      setFixedMaxHeightPx(clamp(available, minFixedHeightPx, maxFixedHeightPx));
     };
 
     const raf = window.requestAnimationFrame(compute);
@@ -286,7 +227,13 @@ export default function ChatInteractionPage() {
       window.cancelAnimationFrame(raf);
       window.removeEventListener("resize", compute);
     };
-  }, [autoFitHeight]);
+  }, [autoFitHeight, maxFixedHeightPx, viewport.h]);
+
+  const panelHeightPx = clamp(fixedMaxHeightPx, minFixedHeightPx, maxFixedHeightPx);
+  const wrapperWidthClampedPx = clamp(wrapperWidthPx, minWrapperWidthPx, maxWrapperWidthPx);
+
+  const contentWidthPx = Math.max(0, wrapperWidthClampedPx - HANDLE_TOTAL_PX);
+  const referenceWidthClampedPx = clamp(referenceRatioClamped, minRefRatio, maxRefRatio) * contentWidthPx;
 
   // When the wrapper exceeds the available width, pad the scroll container symmetrically
   // and scroll so the block stays centered.
@@ -295,16 +242,26 @@ export default function ChatInteractionPage() {
     if (!el) return;
 
     const compute = () => {
-      const availableW = el.clientWidth || window.innerWidth;
-      const pad = wrapperWidthPx > availableW ? Math.round((wrapperWidthPx - availableW) / 2) : 0;
+      const availableW = el.clientWidth || viewport.w || window.innerWidth;
+      const pad = wrapperWidthClampedPx > availableW ? Math.round((wrapperWidthClampedPx - availableW) / 2) : 0;
       setScrollPadPx(pad);
+
+      // Keep the wrapper centered within the scroll area.
       el.scrollLeft = pad > 0 ? pad * 2 : 0;
     };
 
     compute();
     window.addEventListener("resize", compute);
     return () => window.removeEventListener("resize", compute);
-  }, [wrapperWidthPx]);
+  }, [wrapperWidthClampedPx, viewport.w]);
+
+  const dragWrapperState = useRef<{
+    startX: number;
+    startW: number;
+    side: "left" | "right";
+    minW: number;
+    maxW: number;
+  } | null>(null);
 
   function onWrapperResizeMouseDown(e: React.MouseEvent, side: "left" | "right") {
     if (e.button !== 0) return;
@@ -314,14 +271,14 @@ export default function ChatInteractionPage() {
     if (!el) return;
 
     const currentW = el.getBoundingClientRect().width;
-
-    const startW = clamp(currentW, minWrapperWidthPx, MAX_WRAPPER_WIDTH_PX);
+    const startW = clamp(currentW, minWrapperWidthPx, maxWrapperWidthPx);
 
     dragWrapperState.current = {
       startX: e.clientX,
       startW,
       side,
       minW: minWrapperWidthPx,
+      maxW: maxWrapperWidthPx,
     };
 
     const prevCursor = document.body.style.cursor;
@@ -338,7 +295,7 @@ export default function ChatInteractionPage() {
       const signed = st.side === "right" ? dx : -dx;
 
       // symmetric resize: moving one edge by dx changes total width by 2*dx
-      const nextW = clamp(st.startW + signed * 2, st.minW, MAX_WRAPPER_WIDTH_PX);
+      const nextW = clamp(st.startW + signed * 2, st.minW, st.maxW);
       setWrapperWidthPx(nextW);
     };
 
@@ -355,7 +312,6 @@ export default function ChatInteractionPage() {
   }
 
   // For “nice feedback”: measure the actual panel container
-  const panelRef = useRef<HTMLDivElement | null>(null);
   const [panelSize, setPanelSize] = useState<{ w: number; h: number } | null>(null);
 
   useEffect(() => {
@@ -374,19 +330,33 @@ export default function ChatInteractionPage() {
   }, []);
 
   // Drag handle between Chat and Refs (reference width)
-  const dragRefState = useRef<{ startX: number; startW: number } | null>(null);
+  const dragRefState = useRef<{ startX: number; startRefPx: number; contentW: number } | null>(null);
 
   function onRefResizeMouseDown(e: React.MouseEvent) {
     if (e.button !== 0) return;
     e.preventDefault();
-    dragRefState.current = {startX: e.clientX, startW: referenceWidthPx};
+
+    const el = wrapperRef.current;
+    const wrapperW = el?.getBoundingClientRect().width ?? wrapperWidthClampedPx;
+    const contentW = Math.max(1, wrapperW - HANDLE_TOTAL_PX);
+
+    // Use the current rendered ref width at drag start.
+    const startRefPx = clamp(referenceRatioClamped, minRefRatio, maxRefRatio) * contentW;
+
+    dragRefState.current = {startX: e.clientX, startRefPx, contentW};
 
     const onMove = (ev: MouseEvent) => {
       const st = dragRefState.current;
       if (!st) return;
+
       const dx = ev.clientX - st.startX;
-      setReferenceWidthPx(clamp(st.startW - dx, MIN_REFERENCE_WIDTH_PX, MAX_REFERENCE_WIDTH_PX));
-      // NOTE: st.startW - dx makes dragging left increase refs, right decrease refs
+      const nextRefPx = st.startRefPx - dx; // dragging left increases refs
+
+      const minRefPx = minRefRatio * st.contentW;
+      const maxRefPx = maxRefRatio * st.contentW;
+
+      const clampedPx = clamp(nextRefPx, minRefPx, maxRefPx);
+      setReferenceWidthRatio(clampedPx / st.contentW);
     };
 
     const onUp = () => {
@@ -406,13 +376,14 @@ export default function ChatInteractionPage() {
     if (e.button !== 0) return;
     e.preventDefault();
     setAutoFitHeight(false);
-    dragHeightState.current = {startY: e.clientY, startH: fixedMaxHeightPx};
+
+    dragHeightState.current = {startY: e.clientY, startH: panelHeightPx};
 
     const onMove = (ev: MouseEvent) => {
       const st = dragHeightState.current;
       if (!st) return;
       const dy = ev.clientY - st.startY;
-      setFixedMaxHeightPx(clamp(st.startH + dy, MIN_FIXED_HEIGHT_PX, MAX_FIXED_HEIGHT_PX));
+      setFixedMaxHeightPx(clamp(st.startH + dy, minFixedHeightPx, maxFixedHeightPx));
     };
 
     const onUp = () => {
@@ -495,14 +466,14 @@ export default function ChatInteractionPage() {
     setError(null);
 
     try {
-      const updated = await poseChat(chatId, userInput);
-      setChat(updated);
+      const updatedChat = await poseChat(chatId, userInput);
+      setChat(updatedChat);
 
       // keep selection on newest (common chat behavior)
-      const idx = (updated.interactions?.length ?? 0) - 1;
+      const idx = (updatedChat.interactions?.length ?? 0) - 1;
       setSelectedInteractionIndex(idx >= 0 ? idx : -1);
 
-      if (DEBUG) console.log("[ChatInteraction] updated chat:", updated);
+      if (DEBUG) console.log("[ChatInteraction] updated chat:", updatedChat);
     } catch (e: any) {
       setError(e?.message ?? String(e));
     } finally {
@@ -514,30 +485,39 @@ export default function ChatInteractionPage() {
     return <Alert severity="warning">No chat id in route.</Alert>;
   }
 
-  const panelHeightPx = clamp(fixedMaxHeightPx, MIN_FIXED_HEIGHT_PX, MAX_FIXED_HEIGHT_PX);
-  const wrapperWidthClampedPx = clamp(wrapperWidthPx, minWrapperWidthPx, MAX_WRAPPER_WIDTH_PX);
-  const referenceWidthClampedPx = clamp(referenceWidthPx, MIN_REFERENCE_WIDTH_PX, MAX_REFERENCE_WIDTH_PX);
-
   return (
-    <Stack spacing={2.5}>
-      <ChatHeader
-        chatName={chatName}
-        chatId={chatId}
-        username={username}
-        workflowName={workflowName}
-        workflowId={chat ? normalizeObjectId((chat as any).workflow_system_id) : undefined}
-        onNewChat={() => setShowCreator(true)}
-        rightSlot={
-          <Stack direction="row" spacing={1}>
-            <Button variant="outlined" onClick={() => setShowLayout(true)} sx={{textTransform: "none"}}>
-              Layout
-            </Button>
-            <Button variant="outlined" disabled sx={{textTransform: "none"}}>
-              Export
-            </Button>
-          </Stack>
-        }
-      />
+    <Stack
+      spacing={2.5}
+      sx={{
+        height: "100dvh",
+        minHeight: "100dvh",
+        overflow: "hidden",
+        width: "98vw",
+        maxWidth: "98vw",
+        marginLeft: "calc(-49vw + 50%)",
+        marginRight: "calc(-49vw + 50%)",
+        alignItems: "center",
+      }}
+    >
+      <Container
+        maxWidth="lg"
+      >
+        <ChatHeader
+          chatName={chatName}
+          chatId={chatId}
+          username={username}
+          workflowName={workflowName}
+          workflowId={chat ? normalizeObjectId((chat as any).workflow_system_id) : undefined}
+          onNewChat={() => setShowCreator(true)}
+          rightSlot={
+            <Stack direction="row" spacing={1}>
+              <Button variant="outlined" disabled sx={{textTransform: "none"}}>
+                Export
+              </Button>
+            </Stack>
+          }
+        />
+      </Container>
 
       {/* New chat popup */}
       <Dialog open={showCreator} onClose={() => setShowCreator(false)} fullWidth maxWidth="md">
@@ -564,156 +544,6 @@ export default function ChatInteractionPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Layout dialog */}
-      <Dialog open={showLayout} onClose={() => setShowLayout(false)} fullWidth maxWidth="md">
-        <DialogTitle sx={{fontWeight: 800}}>
-          <Typography variant="h5" sx={{fontWeight: 800}}>Layout</Typography>
-          <IconButton
-            aria-label="close"
-            onClick={() => setShowLayout(false)}
-            sx={{position: "absolute", right: 8, top: 8}}
-            size="small"
-          >
-            <CloseIcon/>
-          </IconButton>
-        </DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={2.25}>
-            <Stack direction={{xs: "column", md: "row"}} spacing={2} alignItems={{md: "flex-start"}}>
-              <Box sx={{flex: 1, minWidth: 260}}>
-                <Typography variant="subtitle2" sx={{fontWeight: 800, mb: 1}}>
-                  Height
-                </Typography>
-                <Typography variant="caption" sx={{display: "block"}}>
-                  Panel max height (px)
-                </Typography>
-                <Box
-                  onMouseEnter={() => setPreviewFocus("height")}
-                  onMouseLeave={() => setPreviewFocus(null)}
-                  onFocus={() => setPreviewFocus("height")}
-                  onBlur={() => setPreviewFocus(null)}
-                >
-                  <Slider
-                    value={fixedMaxHeightPx}
-                    min={MIN_FIXED_HEIGHT_PX}
-                    max={MAX_FIXED_HEIGHT_PX}
-                    step={10}
-                    valueLabelDisplay="auto"
-                    onChange={(_, v) => {
-                      setAutoFitHeight(false);
-                      setFixedMaxHeightPx(v as number);
-                    }}
-                  />
-                </Box>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{mt: 0.5}}>
-                  <Button
-                    size="small"
-                    variant={autoFitHeight ? "contained" : "outlined"}
-                    onClick={() => setAutoFitHeight(true)}
-                    sx={{textTransform: "none"}}
-                  >
-                    Fit to page
-                  </Button>
-                  <Typography variant="caption" sx={{opacity: 0.75}}>
-                    Or drag the horizontal handle below the panel.
-                  </Typography>
-                </Stack>
-              </Box>
-
-              <Divider flexItem orientation="vertical" sx={{display: {xs: "none", md: "block"}}}/>
-
-              <Box sx={{flex: 1, minWidth: 260}}>
-                <Typography variant="subtitle2" sx={{fontWeight: 800, mb: 1}}>
-                  Width
-                </Typography>
-                <Typography variant="caption" sx={{display: "block"}}>
-                  Wrapper width (px) — can exceed 100%
-                </Typography>
-                <Box
-                  onMouseEnter={() => setPreviewFocus("width")}
-                  onMouseLeave={() => setPreviewFocus(null)}
-                  onFocus={() => setPreviewFocus("width")}
-                  onBlur={() => setPreviewFocus(null)}
-                >
-                  <Slider
-                    value={wrapperWidthPx}
-                    min={minWrapperWidthPx}
-                    max={MAX_WRAPPER_WIDTH_PX}
-                    step={20}
-                    valueLabelDisplay="auto"
-                    onChange={(_, v) => setWrapperWidthPx(v as number)}
-                  />
-                </Box>
-                <Typography variant="caption" sx={{display: "block", opacity: 0.75}}>
-                  Tip: Drag the left/right vertical handles to resize symmetrically.
-                </Typography>
-
-                <Typography variant="subtitle2" sx={{fontWeight: 800, mt: 2, mb: 1}}>
-                  Reference panel
-                </Typography>
-                <Typography variant="caption" sx={{display: "block"}}>
-                  Reference width (px)
-                </Typography>
-                <Box
-                  onMouseEnter={() => setPreviewFocus("refs")}
-                  onMouseLeave={() => setPreviewFocus(null)}
-                  onFocus={() => setPreviewFocus("refs")}
-                  onBlur={() => setPreviewFocus(null)}
-                >
-                  <Slider
-                    value={referenceWidthPx}
-                    min={MIN_REFERENCE_WIDTH_PX}
-                    max={MAX_REFERENCE_WIDTH_PX}
-                    step={10}
-                    valueLabelDisplay="auto"
-                    onChange={(_, v) => setReferenceWidthPx(v as number)}
-                  />
-                </Box>
-                <Typography variant="caption" sx={{display: "block", opacity: 0.75}}>
-                  Tip: Drag the middle handle between chat and references.
-                </Typography>
-              </Box>
-            </Stack>
-
-            {panelSize && (
-              <Box>
-                <Divider sx={{my: 1.5}}/>
-                <Stack direction={{xs: "column", md: "row"}} justifyContent={{md: "space-between"}}>
-                  <Typography variant="caption" sx={{opacity: 0.85}}>
-                    Current panel size: {Math.round(panelSize.w)} × {Math.round(panelSize.h)} px
-                  </Typography>
-                  <LayoutPreview
-                    wrapperWidthPx={wrapperWidthPx}
-                    fixedMaxHeightPx={fixedMaxHeightPx}
-                    referenceWidthPx={referenceWidthPx}
-                    focus={previewFocus}
-                    maxW={240}
-                    maxH={150}
-                  />
-                </Stack>
-              </Box>
-            )}
-          </Stack>
-        </DialogContent>
-
-        <DialogActions>
-          <Button
-            onClick={() => {
-              setAutoFitHeight(true);
-              setFixedMaxHeightPx(DEFAULT_FIXED_MAX_HEIGHT_PX);
-              setWrapperWidthPx(DEFAULT_WRAPPER_WIDTH_PX);
-              setReferenceWidthPx(DEFAULT_REFERENCE_WIDTH_PX);
-            }}
-            sx={{textTransform: "none"}}
-          >
-            Reset
-          </Button>
-          <Button variant="contained" onClick={() => setShowLayout(false)} sx={{textTransform: "none"}}>
-            Done
-          </Button>
-        </DialogActions>
-      </Dialog>
-
       {error && <Alert severity="error">{error}</Alert>}
 
       {/* Centered wrapper: adjustable overall width (can exceed viewport) */}
@@ -721,8 +551,10 @@ export default function ChatInteractionPage() {
         ref={scrollRef}
         sx={{
           width: "100%",
+          height: "100%",
           overflowX: {xs: "visible", md: "auto"},
           overflowY: "visible",
+          minHeight: 0,
           pl: {xs: 0, md: `${scrollPadPx}px`},
           pr: {xs: 0, md: `${scrollPadPx}px`},
         }}
@@ -733,84 +565,68 @@ export default function ChatInteractionPage() {
             width: {xs: "100%", md: `${wrapperWidthClampedPx}px`},
             mx: "auto",
             position: "relative",
+            height: "100%",
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
           }}
         >
-          {/* Left/right handles to resize the ENTIRE wrapper symmetrically (desktop only) */}
-          <Box
-            sx={{
-              display: {xs: "none", md: "block"},
-              position: "absolute",
-              top: 0,
-              bottom: 0,
-              left: -Math.floor(HANDLE_HIT_PX / 2),
-              width: HANDLE_HIT_PX,
-              cursor: "ew-resize",
-              zIndex: 10,
-              borderRadius: 2,
-              touchAction: "none",
-              "&:hover": {bgcolor: "action.hover"},
-              "&:hover .grab": {opacity: 0.9},
-            }}
-            onMouseDown={(e) => onWrapperResizeMouseDown(e, "left")}
-            title="Drag to resize width"
-          >
-            <Box sx={{position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)"}}>
-              <GrabBar orientation="vertical"/>
-            </Box>
-          </Box>
-
-          <Box
-            sx={{
-              display: {xs: "none", md: "block"},
-              position: "absolute",
-              top: 0,
-              bottom: 0,
-              right: -Math.floor(HANDLE_HIT_PX / 2),
-              width: HANDLE_HIT_PX,
-              cursor: "ew-resize",
-              zIndex: 10,
-              borderRadius: 2,
-              touchAction: "none",
-              "&:hover": {bgcolor: "action.hover"},
-              "&:hover .grab": {opacity: 0.9},
-            }}
-            onMouseDown={(e) => onWrapperResizeMouseDown(e, "right")}
-            title="Drag to resize width"
-          >
-            <Box sx={{position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)"}}>
-              <GrabBar orientation="vertical"/>
-            </Box>
-          </Box>
-
           {/* Panel container: fixed max-height (auto-fits to the rest of the viewport by default) */}
           <Box
             ref={panelRef}
             sx={{
               position: "relative",
-              height: {xs: "auto", md: `${panelHeightPx}px`},
-              maxHeight: {xs: "none", md: `${panelHeightPx}px`},
-              minHeight: {xs: 520, md: MIN_FIXED_HEIGHT_PX},
+              flex: {xs: "0 0 auto", md: autoFitHeight ? "1 1 auto" : "0 0 auto"},
+              height: {xs: "auto", md: autoFitHeight ? "auto" : `${panelHeightPx}px`},
+              maxHeight: {xs: "none", md: autoFitHeight ? "none" : `${maxFixedHeightPx}px`},
+              minHeight: {xs: 0, md: `${minFixedHeightPx}px`},
+              overflow: "hidden",
 
               display: "grid",
               gap: 0,
+
               gridTemplateAreas: {
                 xs: `"chat" "refs"`,
-                md: `"chat handle refs"`,
+                // left handle | chat | middle handle | refs | right handle
+                md: `"handleL chat handleM refs handleR"`,
               },
+
               gridTemplateColumns: {
                 xs: "1fr",
-                md: `minmax(${MIN_CHAT_COL_PX}px, 1fr) ${HANDLE_COL_PX}px ${referenceWidthClampedPx}px`,
+                md: `${HANDLE_COL_PX}px minmax(${MIN_CHAT_COL_PX}px, 1fr) ${HANDLE_COL_PX}px ${referenceWidthClampedPx}px ${HANDLE_COL_PX}px`,
               },
+
               gridTemplateRows: {
                 xs: "auto auto",
                 md: "1fr",
               },
 
-              columnGap: {xs: 2, md: 1.25},
+              columnGap: {xs: 2, md: 0.75},
               rowGap: {xs: 2, md: 0},
               alignItems: "stretch",
             }}
           >
+            {/* Left handle (desktop only) */}
+            <Box
+              sx={{
+                gridArea: "handleL",
+                display: {xs: "none", md: "flex"},
+                width: `${HANDLE_COL_PX}px`,
+                cursor: "col-resize",
+                borderRadius: 2,
+                alignItems: "center",
+                justifyContent: "center",
+                touchAction: "none",
+                px: 0.5, // padding so it doesn't hug the edge
+                "&:hover": {bgcolor: "action.hover"},
+                "&:hover .grab": {opacity: 0.9},
+              }}
+              onMouseDown={(e) => onWrapperResizeMouseDown(e, "left")}
+              title="Drag to resize chat display width"
+            >
+              <GrabBar orientation="vertical"/>
+            </Box>
+
             {/* Chat */}
             <Box sx={{gridArea: "chat", minWidth: 0, minHeight: 0, overflow: "hidden"}}>
               {loading ? (
@@ -827,15 +643,15 @@ export default function ChatInteractionPage() {
                   onSend={send}
                   sending={sending}
                   height="100%"
-                  minHeightPx={MIN_FIXED_HEIGHT_PX}
+                  minHeightPx={`${minFixedHeightPx}px`}
                 />
               )}
             </Box>
 
-            {/* Divider / drag handle (desktop only) */}
+            {/* Middle handle (refs resize, desktop only) */}
             <Box
               sx={{
-                gridArea: "handle",
+                gridArea: "handleM",
                 display: {xs: "none", md: "flex"},
                 width: `${HANDLE_COL_PX}px`,
                 cursor: "col-resize",
@@ -843,6 +659,7 @@ export default function ChatInteractionPage() {
                 alignItems: "center",
                 justifyContent: "center",
                 touchAction: "none",
+                px: 0.5,
                 "&:hover": {bgcolor: "action.hover"},
                 "&:hover .grab": {opacity: 0.9},
               }}
@@ -859,13 +676,35 @@ export default function ChatInteractionPage() {
                   retrievalResults={selectedRetrievalResults}
                   height="100%"
                   stickyHeader
-                  minHeightPx={MIN_FIXED_HEIGHT_PX}
+                  minHeightPx={`${minFixedHeightPx}px`}
                 />
               ) : (
                 <Box sx={{height: "100%"}}/>
               )}
             </Box>
+
+            {/* Right handle (desktop only) */}
+            <Box
+              sx={{
+                gridArea: "handleR",
+                display: {xs: "none", md: "flex"},
+                width: `${HANDLE_COL_PX}px`,
+                cursor: "col-resize",
+                borderRadius: 2,
+                alignItems: "center",
+                justifyContent: "center",
+                touchAction: "none",
+                px: 0.5,
+                "&:hover": {bgcolor: "action.hover"},
+                "&:hover .grab": {opacity: 0.9},
+              }}
+              onMouseDown={(e) => onWrapperResizeMouseDown(e, "right")}
+              title="Drag to resize chat display width"
+            >
+              <GrabBar orientation="vertical"/>
+            </Box>
           </Box>
+
 
           {/* Height drag handle BELOW the panel (desktop only) */}
           <Box

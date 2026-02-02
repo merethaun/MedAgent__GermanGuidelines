@@ -1,5 +1,5 @@
-import {useMemo, useState} from "react";
-import {Box, Button, Divider, Paper, Stack, TextField, Typography} from "@mui/material";
+import {useEffect, useLayoutEffect, useMemo, useRef, useState} from "react";
+import {Box, Button, Divider, Paper, Stack, SxProps, TextField, Theme, Typography} from "@mui/material";
 import {alpha} from "@mui/material/styles";
 import {type Chat, type ChatInteraction} from "../../api/system";
 
@@ -18,9 +18,10 @@ function Bubble(props: {
   side: "left" | "right";
   title: string;
   time?: string;
-  text: string;
+  text: string
+  selected?: boolean;
 }) {
-  const {side, title, time, text} = props;
+  const {side, title, time, text, selected} = props;
   const isLeft = side === "left";
 
   return (
@@ -33,6 +34,12 @@ function Bubble(props: {
           borderRadius: 1,
           bgcolor: isLeft ? alpha(theme.palette.text.primary, 0.07) : alpha(theme.palette.primary.main, 0.08),
           color: "text.primary",
+          border: "0.5px solid",
+          borderColor: selected
+            ? (isLeft
+                ? alpha(theme.palette.text.primary, 0.1)
+                : alpha(theme.palette.primary.main, 0.17)
+            ) : alpha("#000", 0.0),
         })}
       >
         <Stack direction="row" spacing={1} alignItems="baseline" justifyContent="space-between">
@@ -84,8 +91,8 @@ function InteractionBlock(props: {
       })}
     >
       <Stack spacing={1.25}>
-        <Bubble side="left" title="User" time={qTime} text={userText}/>
-        <Bubble side="right" title="System" time={aTime} text={assistantText}/>
+        <Bubble side="left" title="User" time={qTime} text={userText} selected={selected}/>
+        <Bubble side="right" title="System" time={aTime} text={assistantText} selected={selected}/>
         <Typography variant="caption" color="text.secondary" sx={{pl: 1}}>
           {selected ? (
             <b>Interaction #{idx + 1} • References: {refCount}</b>
@@ -95,6 +102,54 @@ function InteractionBlock(props: {
         </Typography>
       </Stack>
     </Box>
+  );
+}
+
+function SendingButton(props: {
+  canSend: boolean;
+  sending: boolean;
+  draft: string;
+  setDraft: (v: string) => void;
+  onSend: (text: string) => void | Promise<void>;
+  minWidth?: number;
+  sx?: SxProps<Theme>;
+}) {
+  const {canSend, sending, draft, setDraft, onSend, minWidth = 120, sx} = props;
+
+  const [dots, setDots] = useState("");
+
+  useEffect(() => {
+    if (!sending) {
+      setDots("");
+      return;
+    }
+
+    const frames = ["   ", ".  ", ".. ", "..."];
+    let i = 0;
+
+    const id = window.setInterval(() => {
+      i = (i + 1) % frames.length;
+      setDots(frames[i]);
+    }, 350);
+
+    return () => window.clearInterval(id);
+  }, [sending]);
+
+  return (
+    <Button
+      variant="contained"
+      sx={{textTransform: "none", minWidth, ...sx}}
+      disabled={!canSend}
+      aria-busy={sending ? "true" : undefined}
+      onClick={() => {
+        if (!canSend) return;
+        const text = draft.trim();
+        setDraft("");
+        void onSend(text);
+      }}
+    >
+      {sending ? `Sending${dots}` : "Send"}
+    </Button>
   );
 }
 
@@ -119,6 +174,37 @@ export default function ChatDisplay(props: {
     return interactions.map((x, idx) => ({x, idx}));
   }, [interactions]);
 
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const [stickToBottom, setStickToBottom] = useState(true);
+
+  const scrollToBottom = (behavior: ScrollBehavior = "auto") => {
+    bottomRef.current?.scrollIntoView({behavior, block: "end"});
+  };
+
+  // Default: scroll to bottom when the chat changes / mounts
+  useLayoutEffect(() => {
+    scrollToBottom("auto");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [(chat as any)?._id]); // use chat.id or chat._id depending on your API model
+
+  // Keep pinned to bottom on new messages, but only if the user hasn't scrolled up
+  useEffect(() => {
+    if (!stickToBottom) return;
+    scrollToBottom("smooth");
+  }, [ordered.length, sending, stickToBottom]);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const thresholdPx = 48; // how close counts as "at bottom"
+    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const atBottom = distanceToBottom < thresholdPx;
+
+    if (atBottom !== stickToBottom) setStickToBottom(atBottom);
+  };
+
   return (
     <Paper
       variant="outlined"
@@ -139,7 +225,11 @@ export default function ChatDisplay(props: {
       <Divider/>
 
       {/* Scrollable message list */}
-      <Box sx={{flex: 1, minHeight: 0, overflow: "auto", p: "2 0"}}>
+      <Box
+        ref={scrollRef}
+        onScroll={handleScroll}
+        sx={{flex: 1, minHeight: 0, overflow: "auto", p: "2 0"}}
+      >
         <Stack spacing={1.25}>
           {ordered.length === 0 ? (
             <Box sx={{p: 1}}>
@@ -157,6 +247,9 @@ export default function ChatDisplay(props: {
               />
             ))
           )}
+
+          {/* sentinel: scroll target */}
+          <Box ref={bottomRef} sx={{height: 1}}/>
         </Stack>
       </Box>
 
@@ -184,20 +277,14 @@ export default function ChatDisplay(props: {
               }
             }}
           />
-
-          <Button
-            variant="contained"
-            sx={{textTransform: "none", minWidth: 100}}
-            disabled={!canSend}
-            onClick={() => {
-              if (!canSend) return;
-              const text = draft.trim();
-              setDraft("");
-              void onSend(text);
-            }}
-          >
-            {sending ? "Sending…" : "Send"}
-          </Button>
+          <SendingButton
+            canSend={canSend}
+            sending={sending}
+            draft={draft}
+            setDraft={setDraft}
+            onSend={onSend}
+            minWidth={100}
+          />
         </Stack>
       </Box>
     </Paper>
