@@ -56,5 +56,36 @@ export function useChatApi() {
     [authedFetch],
   );
 
-  return {listWorkflows, createChatForWorkflow};
+  const getChatById = useCallback(
+    async (chatId: string) => {
+      const res = await authedFetch(`/system/chats/${encodeURIComponent(chatId)}`, {method: "GET"});
+      if (!res.ok) {
+        const body = await readBodySafe(res);
+        throw new Error(
+          `GET /system/chats/${chatId} failed: ${res.status} ${res.statusText} — ${JSON.stringify(body)}`,
+        );
+      }
+      return (await res.json()) as Chat;
+    },
+    [authedFetch],
+  );
+
+  const poseChat = useCallback(
+    async (chatId: string, userInput: string) => {
+      const sp = new URLSearchParams({user_input: userInput});
+      const res = await authedFetch(`/system/chats/${encodeURIComponent(chatId)}/pose?${sp.toString()}`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const body = await readBodySafe(res);
+        throw new Error(
+          `POST /system/chats/${chatId}/pose failed: ${res.status} ${res.statusText} — ${JSON.stringify(body)}`,
+        );
+      }
+      return (await res.json()) as Chat;
+    },
+    [authedFetch],
+  );
+
+  return {listWorkflows, createChatForWorkflow, getChatById, poseChat};
 }

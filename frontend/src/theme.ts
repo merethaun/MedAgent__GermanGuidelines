@@ -1,7 +1,7 @@
 import {alpha, createTheme} from "@mui/material/styles";
 
 export const UI = {
-  navbarTintAlpha: 0.04,
+  navbarTintAlpha: 0.6,
   tabSelectedAlpha: 0.14,
 };
 
@@ -17,7 +17,7 @@ export const theme = createTheme({
     // Teal primary
     primary: {
       main: "#008489",        // teal 600
-      light: "#32babf",       // teal 300
+      light: "#e8f1f1",       // teal 300
       dark: "#045b5e",        // teal 800
       contrastText: "#FFFFFF",
     },
@@ -37,7 +37,7 @@ export const theme = createTheme({
 
     // Green (used via color="success")
     success: {
-      main: "#2E7D32",
+      main: "#40931f",
       contrastText: "#FFFFFF",
     },
 

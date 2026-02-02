@@ -5,6 +5,9 @@ import {useAuthedFetch} from "./http";
 
 export type RetrievalResult = {
   // keep minimal; not needed for list page
+  source_id?: any | null;
+  retrieval?: string | null;
+  reference_id?: any | null;
   [k: string]: any;
 };
 

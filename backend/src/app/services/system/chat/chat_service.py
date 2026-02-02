@@ -62,6 +62,33 @@ class ChatService:
         
         return self.get_chat_entry_by_id(res.inserted_id)
     
+    def rename_chat(self, chat_id: Union[str, ObjectId], new_name: str) -> Chat:
+        """
+        Update only the chat name field.
+        Allowed for admin + study_user (enforced at router level).
+        """
+        if new_name is None or not new_name.strip():
+            raise ValueError("new_name must not be empty")
+        
+        name_clean = new_name.strip()
+        
+        # Optional hard limit to avoid UI breaking / abuse
+        if len(name_clean) > 120:
+            raise ValueError("new_name must be <= 120 characters")
+        
+        oid = self._to_object_id(chat_id, name="chat_id")
+        
+        logger.info("Renaming chat: id=%s name=%r", str(oid), name_clean)
+        res: UpdateResult = self.chat_collection.update_one(
+            {"_id": oid},
+            {"$set": {"name": name_clean}},
+        )
+        
+        if res.matched_count == 0:
+            raise ChatNotFoundError(f"Chat entry not found: {str(oid)}")
+        
+        return self.get_chat_entry_by_id(oid)
+    
     def get_chat_entry_by_id(self, chat_id: Union[str, ObjectId]) -> Chat:
         oid = self._to_object_id(chat_id, name="chat_id")
         doc = self.chat_collection.find_one({"_id": oid})

@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.constants.auth_config import ROLE_ADMIN, ROLE_USER
 from app.controllers.dependencies.auth_dependencies import require_roles
-from app.models.system.system_chat_interaction import Chat
+from app.exceptions.system.chat import ChatNotFoundError
+from app.models.system.system_chat_interaction import Chat, RenameChatRequest
 from app.models.system.workflow_system import WorkflowConfig
 from app.services.service_registry import get_chat_service, get_workflow_storage_service
 from app.services.system import WorkflowSystemStorageService
@@ -306,4 +307,26 @@ def pose_question(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error("Failed to pose question: %s", str(e), exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@system_router.patch(
+    "/chats/{chat_id}/name",
+    response_model=Chat,
+    summary="Rename chat (admin + study_user)",
+    dependencies=[Depends(require_roles(ROLE_ADMIN, ROLE_USER))],
+)
+def rename_chat(
+        chat_id: str,
+        payload: RenameChatRequest,
+        chat_service: ChatService = Depends(get_chat_service),
+) -> Chat:
+    try:
+        return chat_service.rename_chat(chat_id, payload.name)
+    except ChatNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    except Exception as e:
+        logger.error("Failed to rename chat: %s", str(e), exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

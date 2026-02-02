@@ -35,7 +35,7 @@ services:
     environment:
       MODE: update   # "build" or "update"
       BACKEND_LOG__FILE_PATH: /logs/backend.log
-      OIDC_ALLOWED_ISSUERS: "http://localhost:8080/realms/medagent,http://keycloak:8080/realms/medagent"
+      OIDC_ALLOWED_ISSUERS: "http://localhost:8080/realms/medagent,http://keycloak:8080/realms/medagent,http://127.0.0.1:8080/realms/medagent"
       OIDC_ISSUER: http://keycloak:8080/realms/medagent
       OIDC_JWKS_URL: "http://keycloak:8080/realms/medagent/protocol/openid-connect/certs"
       OIDC_AUDIENCE: medagent-backend

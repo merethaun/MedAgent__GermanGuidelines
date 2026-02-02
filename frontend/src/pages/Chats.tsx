@@ -2,6 +2,7 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import {useNavigate} from "react-router-dom";
 import {useAuth} from "../auth/AuthContext";
 
+import CloseIcon from "@mui/icons-material/Close";
 import {
   Alert,
   Box,
@@ -18,13 +19,13 @@ import {
   TableRow,
   Typography,
 } from "@mui/material";
-
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
+import IconButton from "@mui/material/IconButton";
 
 import {type Chat, normalizeObjectId, useSystemApi} from "../api/system";
-import ChatCreator from "../components/ChatCreator";
+import ChatCreator from "../components/chat/ChatCreator";
 
 const DEBUG = true; // set to false when done
 
@@ -194,6 +195,14 @@ export default function ChatsPage() {
       >
         <DialogTitle sx={{fontWeight: 800}}>
           <Typography variant="h5" sx={{fontWeight: 800}}>New chat</Typography>
+          <IconButton
+            aria-label="close"
+            onClick={() => setShowCreator(false)}
+            sx={{position: "absolute", right: 8, top: 8}}
+            size="small"
+          >
+            <CloseIcon/>
+          </IconButton>
         </DialogTitle>
         <DialogContent dividers>
           <ChatCreator

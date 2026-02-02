@@ -32,10 +32,7 @@ export function AuthProvider({children}: { children: ReactNode }) {
           onLoad: "check-sso",
           pkceMethod: "S256",
           checkLoginIframe: false,
-
-          // IMPORTANT:
-          // comment this OUT unless you created /public/silent-check-sso.html
-          // silentCheckSsoRedirectUri: window.location.origin + "/silent-check-sso.html",
+          silentCheckSsoRedirectUri: window.location.origin + "/silent-check-sso.html",
         });
 
         console.log("KC authenticated:", keycloak.authenticated);

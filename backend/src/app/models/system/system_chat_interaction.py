@@ -56,6 +56,10 @@ class WorkflowComponentExecutionResult(BaseModel):
     )
 
 
+class RenameChatRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+
+
 class ChatInteraction(BaseModel):
     user_input: str
     time_question_input: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

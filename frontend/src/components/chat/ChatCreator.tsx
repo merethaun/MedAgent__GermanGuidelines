@@ -1,9 +1,9 @@
 import {useEffect, useMemo, useState} from "react";
 import {Alert, Button, CircularProgress, FormControl, InputLabel, MenuItem, Select, Stack, TextField, Typography,} from "@mui/material";
 
-import {useAuth} from "../auth/AuthContext";
-import {type Chat, normalizeObjectId, type WorkflowConfig} from "../api/system";
-import {useChatApi} from "../api/chat";
+import {useAuth} from "../../auth/AuthContext";
+import {type Chat, normalizeObjectId, type WorkflowConfig} from "../../api/system";
+import {useChatApi} from "../../api/chat";
 
 const DEBUG = false;
 

@@ -29,8 +29,8 @@ export default function NavBar() {
       color="transparent"
       sx={(theme) => ({
         borderBottom: "none",
-        backgroundColor: alpha(theme.palette.primary.main, UI.navbarTintAlpha),
-        backdropFilter: "saturate(60%) blur(2px)",
+        backgroundColor: alpha(theme.palette.primary.light, UI.navbarTintAlpha),
+        backdropFilter: "saturate(160%) blur(16px)",
         boxShadow: "0 1px 6px rgba(0,0,0,0.15)",
       })}
     >
@@ -104,7 +104,7 @@ export default function NavBar() {
             onClick={auth.login}
             variant="contained"
             size="small"
-            sx={{textTransform: "none"}}
+            sx={{textTransform: "none", boxShadow: "none"}}
           >
             Login
           </Button>

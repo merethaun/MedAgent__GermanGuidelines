@@ -115,7 +115,8 @@ The mode is configured once when the container is started.
         - Valid post logout redirect URIs: `http://localhost:5173/*`
         - Web origins: `http://localhost:5173`
         - Admin URL: `http://localhost:5173`
-        - *Note: keep all other client capabilities / flows at their default (disabled) so the client behaves as a public SPA (Code + PKCE only).*
+    - *Note: keep all other client capabilities / flows at their default (disabled) so the client behaves as a public SPA (Code + PKCE only).*
+    - *Note: Might be useful to add also `127.0.0.1` as a valid origin, so the frontend can be accessed directly from the host machine.*
 
 ## Keycloak persistence
 
