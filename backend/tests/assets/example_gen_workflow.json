@@ -1,0 +1,45 @@
+{
+  "name": "Test Start, Gen, End",
+  "nodes": [
+	{
+	  "component_id": "start",
+	  "name": "Start node",
+	  "type": "start",
+	  "parameters": {}
+	},
+	{
+	  "component_id": "generator",
+	  "name": "OpenAI Generator",
+	  "type": "generator",
+	  "parameters": {
+		"system_prompt": "Answer the question based on information from AWMF documents.",
+		"llm_settings": {
+		  "model": "gpt-4o-mini",
+		  "api_key": "TODO",
+		  "base_url": "https://api.openai.com/v1",
+		  "max_tokens": 512,
+		  "timeout_s": 60
+		},
+		"prompt": "{start.current_user_input}"
+	  }
+	},
+	{
+	  "component_id": "end",
+	  "name": "End node",
+	  "type": "end",
+	  "parameters": {
+		"generation_key": "{generator.response}"
+	  }
+	}
+  ],
+  "edges": [
+	{
+	  "source": "start",
+	  "target": "generator"
+	},
+	{
+	  "source": "generator",
+	  "target": "end"
+	}
+  ]
+}

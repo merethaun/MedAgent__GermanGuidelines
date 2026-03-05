@@ -156,7 +156,7 @@ src/app/
 System workflows are built from **components**. All components inherit from
 [`AbstractComponent`](src/app/services/system/components/abstract_component.py) and are registered via:
 
-- `AbstractComponent.variants = {"start": StartComponent, "end": EndComponent}`
+- `AbstractComponent.variants = {"start": StartComponent, "end": EndComponent ...}`
 
 The currently available component variants are:
 
@@ -165,6 +165,12 @@ The currently available component variants are:
 | `start`      | [`StartComponent`](./src/app/services/system/components/structure/start_component.py) | Required as start to provide user input                                                                                                                                                                             |
 | `end`        | [`EndComponent`](./src/app/services/system/components/structure/end_component.py)     | Required as end to define generator output (text) and retrieval result (references)                                                                                                                                 |
 | `generator`  | [`LLMGenerator`](./src/app/services/system/components/generator/generator.py)         | Executes the actual text generation step by sending a resolved prompt to the configured LLM and returning the model response. The LLM is configured via [`LLMSettings`](./src/app/models/tools/llm_interaction.py). |
+
+### Example workflow
+
+Create a workflow by posting a JSON object to POST `<backend>/system/workflow` that looks like:
+
+- [Generator-only workflow](./tests/assets/example_gen_workflow.json) (! need to configure LLM settings)
 
 ---
 

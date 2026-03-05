@@ -39,6 +39,7 @@ cp local.env .env
 ### 2) Start backend + Keycloak + frontend
 
 ```bash
+cd docker
 docker compose -p medagent --env-file .env up -d --build
 ```
 
