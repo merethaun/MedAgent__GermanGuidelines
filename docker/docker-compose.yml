@@ -11,6 +11,7 @@ services:
       VITE_KEYCLOAK_URL: http://localhost:8080
       VITE_KEYCLOAK_REALM: medagent
       VITE_KEYCLOAK_CLIENT_ID: medagent-frontend
+      VITE_KEYCLOAK_ADMIN_ROLE: admin
       CHOKIDAR_USEPOLLING: "true"
       WATCHPACK_POLLING: "true"
     volumes:

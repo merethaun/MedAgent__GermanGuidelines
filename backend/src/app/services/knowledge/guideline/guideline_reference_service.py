@@ -58,13 +58,13 @@ class GuidelineReferenceService:
         _id = self._oid(reference_group_id, what="reference_group_id")
         doc = self.reference_groups_collection.find_one({"_id": _id})
         if not doc:
-            raise GuidelineNotFoundError(f"Reference group not found: {reference_group_id}")
+            raise GuidelineReferenceGroupNotFoundError(f"Reference group not found: {reference_group_id}")
         return GuidelineReferenceGroup.model_validate(doc)
     
     def get_reference_group_by_name(self, name: str) -> GuidelineReferenceGroup:
         doc = self.reference_groups_collection.find_one({"name": name})
         if not doc:
-            raise GuidelineNotFoundError(f"Reference group not found: {name}")
+            raise GuidelineReferenceGroupNotFoundError(f"Reference group not found: {name}")
         return GuidelineReferenceGroup.model_validate(doc)
     
     def list_reference_groups(self) -> List[GuidelineReferenceGroup]:
@@ -97,7 +97,7 @@ class GuidelineReferenceService:
         _id = self._oid(reference_group_id, what="reference_group_id")
         res = self.reference_groups_collection.delete_one({"_id": _id})
         if res.deleted_count == 0:
-            raise GuidelineNotFoundError(f"Reference group not found: {reference_group_id}")
+            raise GuidelineReferenceGroupNotFoundError(f"Reference group not found: {reference_group_id}")
     
     # -------------------------
     # References (CRUD)
@@ -114,7 +114,7 @@ class GuidelineReferenceService:
         _id = self._oid(reference_id, what="reference_id")
         doc = self.reference_collection.find_one({"_id": _id})
         if not doc:
-            raise GuidelineNotFoundError(f"Reference not found: {reference_id}")
+            raise GuidelineReferenceNotFoundError(f"Reference not found: {reference_id}")
         return self._deserialize_reference(doc)
     
     def list_references(
@@ -172,7 +172,7 @@ class GuidelineReferenceService:
         _id = self._oid(reference_id, what="reference_id")
         res = self.reference_collection.delete_one({"_id": _id})
         if res.deleted_count == 0:
-            raise GuidelineNotFoundError(f"Reference not found: {reference_id}")
+            raise GuidelineReferenceNotFoundError(f"Reference not found: {reference_id}")
     
     def delete_references_by_guideline_id(self, guideline_id: Union[str, ObjectId]) -> Tuple[int, List[str]]:
         gid = self._oid(guideline_id, what="guideline_id")

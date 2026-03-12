@@ -15,3 +15,4 @@ pymongo
 yake # keyword
 litellm # llm interaction
 
+PyMuPDF # PDF reference finder

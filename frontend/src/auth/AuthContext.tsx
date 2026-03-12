@@ -9,6 +9,7 @@ type AuthState = {
   login: () => void;
   logout: () => void;
   getToken: () => Promise<string | undefined>;
+  hasRole: (role: string) => boolean;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -73,7 +74,6 @@ export function AuthProvider({children}: { children: ReactNode }) {
     };
   }, []);
 
-
   const value = useMemo<AuthState>(() => ({
     initialized,
     authenticated,
@@ -88,6 +88,16 @@ export function AuthProvider({children}: { children: ReactNode }) {
       } catch {
       }
       return keycloak.token;
+    },
+    hasRole: (role: string) => {
+      if (!keycloak.authenticated) return false;
+
+      const realmRoles = keycloak.realmAccess?.roles ?? [];
+
+      const clientId = import.meta.env.VITE_KEYCLOAK_CLIENT_ID ?? "medagent-frontend";
+      const clientRoles = keycloak.resourceAccess?.[clientId]?.roles ?? [];
+
+      return realmRoles.includes(role) || clientRoles.includes(role);
     },
   }), [initialized, authenticated, token, username]);
 

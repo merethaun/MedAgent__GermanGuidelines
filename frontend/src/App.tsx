@@ -3,6 +3,8 @@ import NavBar from "./components/NavBar";
 import LoginPage from "./pages/Login";
 import ChatsPage from "./pages/Chats";
 import ChatInteractionPage from "./pages/ChatInteraction";
+import ReferenceManagementPage from "./pages/ReferenceManagement"
+import ReferenceEditorPage from "./pages/ReferenceEditing";
 import {useAuth} from "./auth/AuthContext";
 
 import {Box, CircularProgress, Container, CssBaseline} from "@mui/material";
@@ -36,6 +38,8 @@ export default function App() {
               <Route path="/login" element={<LoginPage/>}/>
               <Route path="/chats" element={<Protected><ChatsPage/></Protected>}/>
               <Route path="/chat/:chatId" element={<Protected><ChatInteractionPage/></Protected>}/>
+              <Route path="/admin/references" element={<Protected><ReferenceManagementPage/></Protected>}/>
+              <Route path="/admin/references/:groupId/:guidelineId" element={<Protected><ReferenceEditorPage/></Protected>}/>
               <Route path="*" element={<Navigate to="/chats" replace/>}/>
             </Routes>
           </Box>

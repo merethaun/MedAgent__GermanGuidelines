@@ -9,7 +9,7 @@ from app.constants.mongodb_config import (
 )
 from app.utils.mongo_collection_setup import get_collection, init_mongo
 from .auth import AuthService, TokenService
-from .knowledge.guideline import GuidelineReferenceService, GuidelineService
+from .knowledge.guideline import BoundingBoxFinderService, GuidelineReferenceService, GuidelineService
 from .system import WorkflowSystemInteractionService, WorkflowSystemStorageService
 from .system.chat import ChatService
 from .tools import KeywordService, LLMInteractionService
@@ -17,6 +17,7 @@ from .tools import KeywordService, LLMInteractionService
 _auth_service: Optional[AuthService] = None
 _token_service: Optional[TokenService] = TokenService()
 
+_bounding_box_finder_service: Optional[BoundingBoxFinderService] = None
 _guideline_service: Optional[GuidelineService] = None
 _guideline_reference_service: Optional[GuidelineReferenceService] = None
 
@@ -39,6 +40,10 @@ def init_services() -> None:
     global _token_service
     if _token_service is None:
         _token_service = TokenService()
+    
+    global _bounding_box_finder_service
+    if _bounding_box_finder_service is None:
+        _bounding_box_finder_service = BoundingBoxFinderService()
     
     init_mongo()
     
@@ -89,6 +94,14 @@ def get_token_service() -> TokenService:
     if _token_service is None:
         init_services()
     return _token_service
+
+
+def get_bounding_box_finder_service() -> BoundingBoxFinderService:
+    global _bounding_box_finder_service
+    if _bounding_box_finder_service is None:
+        init_services()
+    assert _bounding_box_finder_service is not None
+    return _bounding_box_finder_service
 
 
 def get_guideline_service() -> GuidelineService:

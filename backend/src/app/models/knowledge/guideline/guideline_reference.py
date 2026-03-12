@@ -1,9 +1,9 @@
-from abc import abstractmethod, ABC
+from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Literal, Union, List, Optional, Tuple
+from typing import List, Literal, Optional, Tuple, Union
 
-from pydantic import BaseModel, Field, ConfigDict, field_serializer, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from app.models.common.py_object_id import PyObjectId
 
@@ -61,9 +61,11 @@ class GuidelineHierarchyEntry(BaseModel):
 
 
 class BoundingBox(BaseModel):
-    page: int = Field(description="Page number of the bounding box")
+    page: int = Field(description="Page number of the bounding box (starting with first page = 1 according to typical PDF interaction")
     positions: Tuple[float, float, float, float] = Field(
-        description="x0, y0, x1, y1 coordinates of the bounding box",
+        description="""x0, y0, x1, y1 coordinates of the bounding box in PDF page points
+        - With (0, 0) as the top-left of the page
+        - 1 point = (1/72) inch = 0.0353 cm (roughly)""",
     )
     
     @field_validator("positions", mode="before")

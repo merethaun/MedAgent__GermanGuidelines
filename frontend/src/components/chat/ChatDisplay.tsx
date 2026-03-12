@@ -32,14 +32,12 @@ function Bubble(props: {
           px: 2,
           py: 1.25,
           borderRadius: 1,
-          bgcolor: isLeft ? alpha(theme.palette.text.primary, 0.07) : alpha(theme.palette.primary.main, 0.08),
+          bgcolor: alpha(theme.palette.text.primary, 0.07),
           color: "text.primary",
           border: "0.5px solid",
           borderColor: selected
-            ? (isLeft
-                ? alpha(theme.palette.text.primary, 0.1)
-                : alpha(theme.palette.primary.main, 0.17)
-            ) : alpha("#000", 0.0),
+            ? alpha(theme.palette.primary.main, 0.17)
+            : alpha("#000", 0.0),
         })}
       >
         <Stack direction="row" spacing={1} alignItems="baseline" justifyContent="space-between">

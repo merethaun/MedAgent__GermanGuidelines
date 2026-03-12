@@ -18,8 +18,6 @@ import ChatHeader from "../components/chat/ChatHeader";
 import ChatDisplay from "../components/chat/ChatDisplay";
 import ReferenceDisplay from "../components/references/ReferenceDisplay";
 
-const DEBUG = false;
-
 // -------------------- Layout helpers --------------------
 
 /**
@@ -472,8 +470,6 @@ export default function ChatInteractionPage() {
       // keep selection on newest (common chat behavior)
       const idx = (updatedChat.interactions?.length ?? 0) - 1;
       setSelectedInteractionIndex(idx >= 0 ? idx : -1);
-
-      if (DEBUG) console.log("[ChatInteraction] updated chat:", updatedChat);
     } catch (e: any) {
       setError(e?.message ?? String(e));
     } finally {

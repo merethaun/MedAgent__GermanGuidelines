@@ -5,6 +5,8 @@ import {AppBar, Box, Button, Tab, Tabs, Toolbar, Typography} from "@mui/material
 import {alpha} from "@mui/material/styles";
 import {UI} from "../theme";
 
+const ADMIN_ROLE = import.meta.env.VITE_KEYCLOAK_ADMIN_ROLE ?? "admin";
+
 export default function NavBar() {
   const auth = useAuth();
   const location = useLocation();
@@ -13,6 +15,8 @@ export default function NavBar() {
   const chatMatch = matchPath("/chat/:chatId", location.pathname);
   const chatId = chatMatch?.params?.chatId;
 
+  const isAdmin = auth.initialized && auth.authenticated && auth.hasRole(ADMIN_ROLE);
+
   const currentTab =
     location.pathname === "/login"
       ? "/login"
@@ -20,7 +24,9 @@ export default function NavBar() {
         ? "/chat"
         : location.pathname === "/chats"
           ? "/chats"
-          : false;
+          : location.pathname.startsWith("/admin/references")
+            ? "/admin/references"
+            : false;
 
   return (
     <AppBar
@@ -73,6 +79,14 @@ export default function NavBar() {
               value="/chat"
               component={RouterLink}
               to={`/chat/${chatId}`}
+            />
+          ) : null}
+          {isAdmin ? (
+            <Tab
+              label="Reference management"
+              value="/admin/references"
+              component={RouterLink}
+              to="/admin/references"
             />
           ) : null}
         </Tabs>

@@ -4,10 +4,11 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 
 from app.constants.auth_config import ROLE_ADMIN, ROLE_USER
 from app.controllers.dependencies.auth_dependencies import require_roles
-from app.exceptions.knowledge.guideline import GuidelineNotFoundError
-from app.models.knowledge.guideline import GuidelineReference, GuidelineReferenceGroup, ReferenceType
-from app.services.knowledge.guideline import GuidelineReferenceService
-from app.services.service_registry import get_guideline_reference_service
+from app.exceptions.knowledge.guideline import GuidelineNotFoundError, TextInGuidelineNotFoundError
+from app.models.knowledge.guideline import BoundingBox, GuidelineEntry, GuidelineReference, GuidelineReferenceGroup, ReferenceType
+from app.models.knowledge.guideline.bounding_box_finder_api import BoundingBoxFinderRequest
+from app.services.knowledge.guideline import BoundingBoxFinderService, GuidelineReferenceService, GuidelineService
+from app.services.service_registry import get_bounding_box_finder_service, get_guideline_reference_service, get_guideline_service
 
 guideline_reference_router = APIRouter()
 
@@ -109,6 +110,58 @@ def delete_reference_group(
 # ============================================================
 # References
 # ============================================================
+
+
+@guideline_reference_router.post(
+    "/finder",
+    response_model=List[BoundingBox],
+    status_code=status.HTTP_200_OK,
+    summary="In a guideline, find the bounding boxes matching the text",
+    dependencies=[Depends(require_roles(ROLE_ADMIN))],
+)
+def find_bounding_boxes(
+        bounding_box_request: BoundingBoxFinderRequest,
+        service: BoundingBoxFinderService = Depends(get_bounding_box_finder_service),
+        guideline_service: GuidelineService = Depends(get_guideline_service),
+) -> List[BoundingBox]:
+    try:
+        guideline: GuidelineEntry = guideline_service.get_guideline_by_id(bounding_box_request.guideline_id)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    
+    try:
+        return service.text_to_bounding_boxes(
+            guideline, bounding_box_request.text, start_page=bounding_box_request.start_page, end_page=bounding_box_request.end_page,
+        )
+    except TextInGuidelineNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@guideline_reference_router.get(
+    "/finder/text",
+    response_model=str,
+    status_code=status.HTTP_200_OK,
+    summary="For a specific guideline page, get all the contained text",
+    dependencies=[Depends(require_roles(ROLE_ADMIN))],
+)
+def get_text_from_guideline_page(
+        guideline_id: str,
+        page_number: int,
+        service: BoundingBoxFinderService = Depends(get_bounding_box_finder_service),
+        guideline_service: GuidelineService = Depends(get_guideline_service),
+) -> str:
+    try:
+        guideline: GuidelineEntry = guideline_service.get_guideline_by_id(guideline_id)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    
+    try:
+        return service.get_page_text(guideline, page_number)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
 
 @guideline_reference_router.post(
     "/",
