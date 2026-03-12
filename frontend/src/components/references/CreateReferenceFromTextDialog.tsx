@@ -1,6 +1,18 @@
 import {useState} from "react";
-import {Alert, Box, Button, Chip, Stack, TextField, Typography,} from "@mui/material";
-import {type BoundingBox, type GuidelineTextReference, useReferenceApi,} from "../../api/references";
+import {Alert, Box, Button, Chip, Stack, TextField, Typography} from "@mui/material";
+import {
+  type BoundingBox,
+  type GuidelineImageReference,
+  type GuidelineMetadataReference,
+  type GuidelineRecommendationReference,
+  type GuidelineReference,
+  type GuidelineReferenceType,
+  type GuidelineStatementReference,
+  type GuidelineTableReference,
+  type GuidelineTextReference,
+  useReferenceApi,
+} from "../../api/references";
+import ReferenceDetailEditor from "./ReferenceDetailEditor";
 
 type Props = {
   guidelineId: string;
@@ -8,6 +20,93 @@ type Props = {
   onCancel: () => void;
   onCreated: () => void | Promise<void>;
 };
+
+function extractPrimaryText(reference: GuidelineReference): string {
+  switch (reference.type) {
+    case "text":
+      return reference.contained_text ?? "";
+    case "image":
+      return reference.describing_text ?? reference.caption ?? "";
+    case "table":
+      return reference.plain_text ?? reference.caption ?? reference.table_markdown ?? "";
+    case "recommendation":
+      return reference.recommendation_content ?? reference.recommendation_title ?? "";
+    case "statement":
+      return reference.statement_content ?? reference.statement_title ?? "";
+    case "metadata":
+      return reference.metadata_content ?? reference.metadata_type ?? "";
+    default:
+      return "";
+  }
+}
+
+function createDraftReference(args: {
+  guidelineId: string;
+  referenceGroupId: string;
+  type: GuidelineReferenceType;
+  bboxs?: BoundingBox[];
+  note?: string | null;
+  documentHierarchy?: GuidelineReference["document_hierarchy"];
+  seedText?: string;
+}): GuidelineReference {
+  const base = {
+    guideline_id: args.guidelineId,
+    reference_group_id: args.referenceGroupId,
+    type: args.type,
+    bboxs: args.bboxs ?? [],
+    note: args.note ?? null,
+    document_hierarchy: args.documentHierarchy ?? [],
+    created_automatically: false,
+  };
+  const seedText = args.seedText ?? "";
+
+  switch (args.type) {
+    case "text":
+      return {
+        ...base,
+        type: "text",
+        contained_text: seedText,
+      } satisfies GuidelineTextReference;
+    case "image":
+      return {
+        ...base,
+        type: "image",
+        caption: "",
+        describing_text: seedText,
+      } satisfies GuidelineImageReference;
+    case "table":
+      return {
+        ...base,
+        type: "table",
+        caption: "",
+        plain_text: seedText,
+        table_markdown: "",
+      } satisfies GuidelineTableReference;
+    case "recommendation":
+      return {
+        ...base,
+        type: "recommendation",
+        recommendation_title: null,
+        recommendation_content: seedText,
+        recommendation_grade: "",
+      } satisfies GuidelineRecommendationReference;
+    case "statement":
+      return {
+        ...base,
+        type: "statement",
+        statement_title: null,
+        statement_content: seedText,
+        statement_consensus_grade: "",
+      } satisfies GuidelineStatementReference;
+    case "metadata":
+      return {
+        ...base,
+        type: "metadata",
+        metadata_type: "",
+        metadata_content: seedText,
+      } satisfies GuidelineMetadataReference;
+  }
+}
 
 export default function CreateReferenceFromTextDialog({
                                                         guidelineId,
@@ -18,12 +117,16 @@ export default function CreateReferenceFromTextDialog({
   const {findBoundingBoxes, createReference} = useReferenceApi();
 
   const [searchText, setSearchText] = useState("");
-  const [containedText, setContainedText] = useState("");
-  const [note, setNote] = useState("");
   const [startPage, setStartPage] = useState("");
   const [endPage, setEndPage] = useState("");
+  const [draftReference, setDraftReference] = useState<GuidelineReference>(() =>
+    createDraftReference({
+      guidelineId,
+      referenceGroupId,
+      type: "text",
+    }),
+  );
 
-  const [bboxs, setBboxs] = useState<BoundingBox[]>([]);
   const [loadingBoxes, setLoadingBoxes] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,26 +148,61 @@ export default function CreateReferenceFromTextDialog({
         start_page: startPage.trim() ? Number(startPage) : null,
         end_page: endPage.trim() ? Number(endPage) : null,
       });
-      setBboxs(found ?? []);
-      if (!containedText.trim()) {
-        setContainedText(text);
-      }
+
+      setDraftReference((current) =>
+        createDraftReference({
+          guidelineId,
+          referenceGroupId,
+          type: current.type,
+          bboxs: found ?? [],
+          note: current.note ?? null,
+          documentHierarchy: current.document_hierarchy,
+          seedText: extractPrimaryText(current).trim() || text,
+        }),
+      );
     } catch (e: any) {
       console.error(e);
       setError(e?.message ?? String(e));
-      setBboxs([]);
+      setDraftReference((current) => ({
+        ...current,
+        bboxs: [],
+      }));
     } finally {
       setLoadingBoxes(false);
     }
   }
 
-  async function handleCreate() {
-    if (!containedText.trim()) {
-      setError("Please enter the contained text.");
+  function handleTypeChange(referenceType: GuidelineReferenceType) {
+    setDraftReference((current) =>
+      createDraftReference({
+        guidelineId,
+        referenceGroupId,
+        type: referenceType,
+        bboxs: current.bboxs,
+        note: current.note ?? null,
+        documentHierarchy: current.document_hierarchy,
+        seedText: extractPrimaryText(current).trim() || searchText.trim(),
+      }),
+    );
+  }
+
+  async function handleCreate(patch: Record<string, unknown>) {
+    const payload = {
+      ...draftReference,
+      ...patch,
+      guideline_id: guidelineId,
+      reference_group_id: referenceGroupId,
+      type: draftReference.type,
+      created_automatically: false,
+    } as GuidelineReference;
+
+    if ((payload.bboxs ?? []).length === 0) {
+      setError("Please find at least one bounding box first.");
       return;
     }
-    if (bboxs.length === 0) {
-      setError("Please find at least one bounding box first.");
+
+    if (payload.type === "text" && !payload.contained_text.trim()) {
+      setError("Please enter the contained text.");
       return;
     }
 
@@ -72,16 +210,6 @@ export default function CreateReferenceFromTextDialog({
     setError(null);
 
     try {
-      const payload: GuidelineTextReference = {
-        guideline_id: guidelineId,
-        reference_group_id: referenceGroupId,
-        type: "text",
-        contained_text: containedText.trim(),
-        bboxs,
-        note: note.trim() || null,
-        created_automatically: false,
-      };
-
       await createReference(payload);
       await onCreated();
     } catch (e: any) {
@@ -91,6 +219,8 @@ export default function CreateReferenceFromTextDialog({
       setSaving(false);
     }
   }
+
+  const bboxs = draftReference.bboxs ?? [];
 
   return (
     <Stack spacing={2}>
@@ -140,35 +270,20 @@ export default function CreateReferenceFromTextDialog({
         </Stack>
       </Box>
 
-      <TextField
-        label="Contained text"
-        value={containedText}
-        onChange={(e) => setContainedText(e.target.value)}
-        fullWidth
-        multiline
-        minRows={3}
-      />
-
-      <TextField
-        label="Note"
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        fullWidth
-        multiline
-        minRows={2}
+      <ReferenceDetailEditor
+        reference={draftReference}
+        saving={saving || loadingBoxes}
+        onSave={handleCreate}
+        mode="create"
+        saveLabel="Create"
+        allowTypeChange
+        onTypeChange={handleTypeChange}
+        emptyStateText="Search for text to create a reference."
       />
 
       <Box sx={{display: "flex", justifyContent: "flex-end", gap: 1}}>
         <Button onClick={onCancel} disabled={saving || loadingBoxes} sx={{textTransform: "none"}}>
           Cancel
-        </Button>
-        <Button
-          variant="contained"
-          onClick={handleCreate}
-          disabled={saving || bboxs.length === 0 || !containedText.trim()}
-          sx={{textTransform: "none"}}
-        >
-          Create
         </Button>
       </Box>
     </Stack>

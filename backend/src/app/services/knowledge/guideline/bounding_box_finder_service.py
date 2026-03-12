@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import fitz  # PyMuPDF
 
@@ -11,6 +11,16 @@ from app.models.knowledge.guideline import BoundingBox, GuidelineEntry
 @dataclass
 class BoundingBoxFinderService:
     """Service for finding bounding boxes in a guideline document."""
+
+    MIN_BOX_WIDTH = 5.0
+    MIN_BOX_AREA = 80.0
+    THIN_TALL_BOX_MAX_WIDTH = 10.0
+    THIN_TALL_BOX_MIN_HEIGHT = 30.0
+    SAME_LINE_Y_TOLERANCE = 3.0
+    HORIZONTAL_MERGE_GAP = 8.0
+    VERTICAL_MERGE_GAP = 4.0
+    COLUMN_X_TOLERANCE = 2.0
+    BLOCK_X_OVERLAP_TOLERANCE = 2.0
     
     @staticmethod
     def _normalize_text(text: str) -> str:
@@ -28,6 +38,109 @@ class BoundingBoxFinderService:
             raise FileNotFoundError(f"PDF file not found: {pdf_path}")
         
         return pdf_path
+
+    @staticmethod
+    def _merge_positions(
+            rects: List[Tuple[float, float, float, float]],
+    ) -> List[Tuple[int, int, int, int]]:
+        """Merge rectangles that likely belong to the same text block."""
+        rects = [rect for rect in rects if BoundingBoxFinderService._is_meaningful_rect(rect)]
+
+        if not rects:
+            return []
+
+        merged_rects = sorted(rects, key=lambda rect: (rect[1], rect[0], rect[3], rect[2]))
+
+        changed = True
+        while changed:
+            changed = False
+            next_rects: List[Tuple[float, float, float, float]] = []
+
+            for rect in merged_rects:
+                merged = False
+
+                for idx, existing in enumerate(next_rects):
+                    if BoundingBoxFinderService._should_merge_rects(existing, rect):
+                        next_rects[idx] = BoundingBoxFinderService._combine_rects(existing, rect)
+                        merged = True
+                        changed = True
+                        break
+
+                if not merged:
+                    next_rects.append(rect)
+
+            merged_rects = sorted(next_rects, key=lambda rect: (rect[1], rect[0], rect[3], rect[2]))
+
+        return [
+            (
+                int(round(rect[0])),
+                int(round(rect[1])),
+                int(round(rect[2])),
+                int(round(rect[3])),
+            )
+            for rect in merged_rects
+        ]
+
+    @classmethod
+    def _is_meaningful_rect(cls, rect: Tuple[float, float, float, float]) -> bool:
+        width = rect[2] - rect[0]
+        height = rect[3] - rect[1]
+        area = width * height
+
+        if width < cls.MIN_BOX_WIDTH:
+            return False
+
+        if area < cls.MIN_BOX_AREA:
+            return False
+
+        if width <= cls.THIN_TALL_BOX_MAX_WIDTH and height >= cls.THIN_TALL_BOX_MIN_HEIGHT:
+            return False
+
+        return True
+
+    @classmethod
+    def _should_merge_rects(
+            cls,
+            left: Tuple[float, float, float, float],
+            right: Tuple[float, float, float, float],
+    ) -> bool:
+        left_x0, left_y0, left_x1, left_y1 = left
+        right_x0, right_y0, right_x1, right_y1 = right
+
+        horizontal_gap = max(0.0, max(right_x0 - left_x1, left_x0 - right_x1))
+        vertical_gap = max(0.0, max(right_y0 - left_y1, left_y0 - right_y1))
+
+        left_center_y = (left_y0 + left_y1) / 2
+        right_center_y = (right_y0 + right_y1) / 2
+        same_line = (
+            abs(left_center_y - right_center_y) <= cls.SAME_LINE_Y_TOLERANCE
+            and vertical_gap <= cls.SAME_LINE_Y_TOLERANCE
+        )
+
+        same_column = (
+            abs(left_x0 - right_x0) <= cls.COLUMN_X_TOLERANCE
+            and abs(left_x1 - right_x1) <= cls.COLUMN_X_TOLERANCE
+            and vertical_gap <= cls.VERTICAL_MERGE_GAP
+        )
+
+        overlapping_block = (
+            min(left_x1, right_x1) - max(left_x0, right_x0) >= -cls.BLOCK_X_OVERLAP_TOLERANCE
+            and vertical_gap <= cls.VERTICAL_MERGE_GAP
+        )
+
+        return (same_line and horizontal_gap <= cls.HORIZONTAL_MERGE_GAP) or same_column or overlapping_block
+
+    @staticmethod
+    def _combine_rects(
+            first: Tuple[float, float, float, float],
+            second: Tuple[float, float, float, float],
+    ) -> Tuple[float, float, float, float]:
+        return (
+            min(first[0], second[0]),
+            min(first[1], second[1]),
+            max(first[2], second[2]),
+            max(first[3], second[3]),
+        )
     
     def get_page_text(self, guideline: GuidelineEntry, page: int) -> str:
         """Return the full text of a specific PDF page.
@@ -86,6 +199,7 @@ class BoundingBoxFinderService:
             
             for page_index in range(start_idx, end_idx + 1):
                 page = doc[page_index]
+                page_rects: List[Tuple[float, float, float, float]] = []
                 
                 rects = page.search_for(original_text, flags=search_flags)
                 
@@ -93,10 +207,13 @@ class BoundingBoxFinderService:
                     rects = page.search_for(normalized_text, flags=search_flags)
                 
                 for rect in rects:
+                    page_rects.append((rect.x0, rect.y0, rect.x1, rect.y1))
+
+                for merged_rect in self._merge_positions(page_rects):
                     bboxs.append(
                         BoundingBox(
                             page=page_index + 1,  # 1-based page numbering
-                            positions=(rect.x0, rect.y0, rect.x1, rect.y1),
+                            positions=merged_rect,
                         ),
                     )
         

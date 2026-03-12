@@ -1,13 +1,23 @@
 import {useEffect, useMemo, useState} from "react";
-import {Alert, Box, Button, Card, CardContent, Divider, Stack, TextField, Typography} from "@mui/material";
-import {type BoundingBox, type GuidelineHierarchyEntry, type GuidelineReference,} from "../../api/references";
+import {Alert, Box, Button, Card, CardContent, Divider, MenuItem, Stack, TextField, Typography} from "@mui/material";
+import {
+  type BoundingBox,
+  type GuidelineHierarchyEntry,
+  type GuidelineReference,
+  type GuidelineReferenceType,
+} from "../../api/references";
 import {normalizeObjectId} from "../../api/system";
 
 type Props = {
   reference: GuidelineReference | null;
   saving?: boolean;
   onSave: (patch: Record<string, unknown>) => void | Promise<void>;
-  onDelete: (referenceId: string) => void | Promise<void>;
+  onDelete?: (referenceId: string) => void | Promise<void>;
+  mode?: "edit" | "create";
+  saveLabel?: string;
+  emptyStateText?: string;
+  allowTypeChange?: boolean;
+  onTypeChange?: (referenceType: GuidelineReferenceType) => void;
 };
 
 type HierarchyRowDraft = {
@@ -78,6 +88,11 @@ export default function ReferenceDetailEditor({
                                                 saving = false,
                                                 onSave,
                                                 onDelete,
+                                                mode = "edit",
+                                                saveLabel,
+                                                emptyStateText,
+                                                allowTypeChange = false,
+                                                onTypeChange,
                                               }: Props) {
   const [note, setNote] = useState("");
   const [bboxJson, setBboxJson] = useState("[]");
@@ -147,6 +162,7 @@ export default function ReferenceDetailEditor({
     () => (reference ? normalizeObjectId(reference._id ?? "") : ""),
     [reference],
   );
+  const actionLabel = saveLabel ?? (mode === "create" ? "Create" : "Save");
 
   const hierarchyPath = useMemo(
     () => getHierarchyPath(documentHierarchy),
@@ -267,7 +283,7 @@ export default function ReferenceDetailEditor({
             Reference details
           </Typography>
           <Typography color="text.secondary">
-            Select a reference to edit it.
+            {emptyStateText ?? "Select a reference to edit it."}
           </Typography>
         </CardContent>
       </Card>
@@ -296,9 +312,27 @@ export default function ReferenceDetailEditor({
             <Typography variant="h6" sx={{fontWeight: 800}}>
               Reference details
             </Typography>
-            <Typography color="text.secondary">
-              Type: {reference.type}
-            </Typography>
+            {allowTypeChange ? (
+              <TextField
+                select
+                label="Reference type"
+                value={reference.type}
+                onChange={(e) => onTypeChange?.(e.target.value as GuidelineReferenceType)}
+                fullWidth
+                sx={{mt: 1}}
+              >
+                <MenuItem value="text">Text</MenuItem>
+                <MenuItem value="image">Image</MenuItem>
+                <MenuItem value="table">Table</MenuItem>
+                <MenuItem value="recommendation">Recommendation</MenuItem>
+                <MenuItem value="statement">Statement</MenuItem>
+                <MenuItem value="metadata">Metadata</MenuItem>
+              </TextField>
+            ) : (
+              <Typography color="text.secondary">
+                Type: {reference.type}
+              </Typography>
+            )}
           </Box>
 
           {error ? <Alert severity="error">{error}</Alert> : null}
@@ -559,15 +593,19 @@ export default function ReferenceDetailEditor({
           />
 
           <Box sx={{display: "flex", justifyContent: "space-between", gap: 1}}>
-            <Button
-              color="error"
-              variant="outlined"
-              disabled={saving || !referenceId}
-              onClick={() => onDelete(referenceId)}
-              sx={{textTransform: "none"}}
-            >
-              Delete
-            </Button>
+            {mode === "edit" ? (
+              <Button
+                color="error"
+                variant="outlined"
+                disabled={saving || !referenceId}
+                onClick={() => onDelete?.(referenceId)}
+                sx={{textTransform: "none"}}
+              >
+                Delete
+              </Button>
+            ) : (
+              <Box />
+            )}
 
             <Button
               variant="contained"
@@ -575,7 +613,7 @@ export default function ReferenceDetailEditor({
               onClick={handleSave}
               sx={{textTransform: "none"}}
             >
-              Save
+              {actionLabel}
             </Button>
           </Box>
         </Stack>

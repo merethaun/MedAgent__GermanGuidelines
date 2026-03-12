@@ -179,7 +179,9 @@ Create a workflow by posting a JSON object to POST `<backend>/system/workflow` t
 Via the backend API, add a guideline entry to the database.
 
 Then, guideline references can be created in the frontend when they are assigned the role of `admin`.
-Once logged in, a new tab with the name "reference management" will appear in the navigation bar. Here, a new reference group can be created
+Once logged in, a new tab with the name "reference management" will appear in the navigation bar.
+Here, a new reference group can be created, and a guideline can be selected, allowing to now manage and add new references.
+How to create a new one: currently only implemented with the bounding box text search.
 
 ## Current scope
 

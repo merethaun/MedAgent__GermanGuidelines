@@ -54,6 +54,7 @@ def init_services() -> None:
     global _guideline_reference_service
     if _guideline_reference_service is None:
         _guideline_reference_service = GuidelineReferenceService(
+            guideline_collection=get_collection(GUIDELINE_COLLECTION),
             reference_groups_collection=get_collection(GUIDELINE_REFERENCE_GROUP_COLLECTION),
             reference_collection=get_collection(GUIDELINE_REFERENCE_COLLECTION),
         )

@@ -4,7 +4,11 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 
 from app.constants.auth_config import ROLE_ADMIN, ROLE_USER
 from app.controllers.dependencies.auth_dependencies import require_roles
-from app.exceptions.knowledge.guideline import GuidelineNotFoundError, TextInGuidelineNotFoundError
+from app.exceptions.knowledge.guideline import (
+    GuidelineNotFoundError,
+    GuidelineReferenceGroupNotFoundError,
+    TextInGuidelineNotFoundError,
+)
 from app.models.knowledge.guideline import BoundingBox, GuidelineEntry, GuidelineReference, GuidelineReferenceGroup, ReferenceType
 from app.models.knowledge.guideline.bounding_box_finder_api import BoundingBoxFinderRequest
 from app.services.knowledge.guideline import BoundingBoxFinderService, GuidelineReferenceService, GuidelineService
@@ -172,12 +176,16 @@ def get_text_from_guideline_page(
     dependencies=[Depends(require_roles(ROLE_ADMIN))],
 )
 def create_reference(
-        reference: GuidelineReference,
+        reference: Dict = Body(..., description="Reference payload; string ids are resolved before insert."),
         service: GuidelineReferenceService = Depends(get_guideline_reference_service),
 ) -> str:
     try:
         created = service.create_reference(reference)
         return str(created.id)
+    except (GuidelineNotFoundError, GuidelineReferenceGroupNotFoundError, TextInGuidelineNotFoundError) as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -201,7 +209,7 @@ def list_references(
             guideline_id=guideline_id,
             reference_type=reference_type,
         )
-    except GuidelineNotFoundError as e:
+    except (GuidelineNotFoundError, GuidelineReferenceGroupNotFoundError) as e:
         # e.g., invalid ObjectId in filters
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -237,15 +245,15 @@ def get_reference(
 )
 def update_reference(
         reference_id: str,
-        reference: GuidelineReference,
+        reference: Dict = Body(..., description="Reference payload; string ids are resolved before update."),
         service: GuidelineReferenceService = Depends(get_guideline_reference_service),
 ) -> GuidelineReference:
     try:
         return service.update_reference(reference_id, reference)
-    except GuidelineNotFoundError as e:
+    except (GuidelineNotFoundError, GuidelineReferenceGroupNotFoundError) as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -259,15 +267,15 @@ def update_reference(
 )
 def patch_reference(
         reference_id: str,
-        patch: Dict = Body(..., description="Fields to update (MongoDB $set)"),
+        patch: Dict = Body(..., description="Fields to update; string ids are resolved before MongoDB $set."),
         service: GuidelineReferenceService = Depends(get_guideline_reference_service),
 ) -> GuidelineReference:
     try:
         return service.update_reference(reference_id, patch)
-    except GuidelineNotFoundError as e:
+    except (GuidelineNotFoundError, GuidelineReferenceGroupNotFoundError) as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -286,7 +294,7 @@ def delete_reference(
     try:
         service.delete_reference_by_id(reference_id)
         return None
-    except GuidelineNotFoundError as e:
+    except (GuidelineNotFoundError, GuidelineReferenceGroupNotFoundError) as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 

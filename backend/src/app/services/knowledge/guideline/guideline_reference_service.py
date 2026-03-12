@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 from bson import ObjectId
 from pymongo.collection import Collection
@@ -18,6 +18,7 @@ from app.models.knowledge.guideline import (
 class GuidelineReferenceService:
     """Service for storing and retrieving guideline references and reference groups in MongoDB."""
     
+    guideline_collection: Collection
     reference_groups_collection: Collection
     reference_collection: Collection
     
@@ -43,6 +44,83 @@ class GuidelineReferenceService:
             # keep this as a hard error (same behavior as your get_reference_by_id)
             raise ValueError(f"Unknown reference type: {reference_type}")
         return model_cls.model_validate(doc)
+
+    def _resolve_guideline_id(self, value: Union[str, ObjectId]) -> ObjectId:
+        """Resolve a guideline reference by ObjectId or stable string fields."""
+        if isinstance(value, ObjectId):
+            if not self.guideline_collection.find_one({"_id": value}, {"_id": 1}):
+                raise GuidelineNotFoundError(f"Guideline not found: {value}")
+            return value
+
+        if ObjectId.is_valid(value):
+            guideline_id = ObjectId(value)
+            if not self.guideline_collection.find_one({"_id": guideline_id}, {"_id": 1}):
+                raise GuidelineNotFoundError(f"Guideline not found: {value}")
+            return guideline_id
+
+        doc = self.guideline_collection.find_one(
+            {
+                "$or": [
+                    {"title": value},
+                    {"awmf_register_number": value},
+                    {"awmf_register_number_full": value},
+                ],
+            },
+            {"_id": 1},
+            sort=[("_id", -1)],
+        )
+        if not doc:
+            raise GuidelineNotFoundError(f"Guideline not found: {value}")
+        return doc["_id"]
+
+    def _resolve_reference_group_id(self, value: Union[str, ObjectId]) -> ObjectId:
+        """Resolve a reference group by ObjectId or by group name."""
+        if isinstance(value, ObjectId):
+            if not self.reference_groups_collection.find_one({"_id": value}, {"_id": 1}):
+                raise GuidelineReferenceGroupNotFoundError(f"Reference group not found: {value}")
+            return value
+
+        if ObjectId.is_valid(value):
+            group_id = ObjectId(value)
+            if not self.reference_groups_collection.find_one({"_id": group_id}, {"_id": 1}):
+                raise GuidelineReferenceGroupNotFoundError(f"Reference group not found: {value}")
+            return group_id
+
+        doc = self.reference_groups_collection.find_one(
+            {"name": value},
+            {"_id": 1},
+            sort=[("_id", -1)],
+        )
+        if not doc:
+            raise GuidelineReferenceGroupNotFoundError(f"Reference group not found: {value}")
+        return doc["_id"]
+
+    def _normalize_reference_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Resolve string identifiers to Mongo ObjectIds before validation/persistence."""
+        normalized = dict(payload)
+
+        if "guideline_id" in normalized and normalized["guideline_id"] is not None:
+            normalized["guideline_id"] = self._resolve_guideline_id(normalized["guideline_id"])
+
+        if "reference_group_id" in normalized and normalized["reference_group_id"] is not None:
+            normalized["reference_group_id"] = self._resolve_reference_group_id(normalized["reference_group_id"])
+
+        normalized.pop("_id", None)
+        return normalized
+
+    @staticmethod
+    def _prepare_reference_for_mongo(payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure Mongo-bound reference payloads keep foreign keys as real ObjectIds."""
+        mongo_payload = dict(payload)
+
+        if "guideline_id" in mongo_payload and mongo_payload["guideline_id"] is not None:
+            mongo_payload["guideline_id"] = ObjectId(mongo_payload["guideline_id"])
+
+        if "reference_group_id" in mongo_payload and mongo_payload["reference_group_id"] is not None:
+            mongo_payload["reference_group_id"] = ObjectId(mongo_payload["reference_group_id"])
+
+        mongo_payload.pop("_id", None)
+        return mongo_payload
     
     # -------------------------
     # Reference groups (CRUD)
@@ -102,9 +180,17 @@ class GuidelineReferenceService:
     # -------------------------
     # References (CRUD)
     # -------------------------
-    def create_reference(self, reference: GuidelineReference) -> GuidelineReference:
-        payload = reference.model_dump(by_alias=True, exclude_none=True)
-        payload.pop("_id", None)
+    def create_reference(self, reference: Union[GuidelineReference, Dict[str, Any]]) -> GuidelineReference:
+        if isinstance(reference, dict):
+            payload = dict(reference)
+        else:
+            payload = reference.model_dump(by_alias=True, exclude_none=True)
+
+        payload = self._normalize_reference_payload(payload)
+        reference_model = self._deserialize_reference(payload)
+        payload = self._prepare_reference_for_mongo(
+            reference_model.model_dump(by_alias=True, exclude_none=True),
+        )
         payload["created_date"] = datetime.now(timezone.utc)
         
         res = self.reference_collection.insert_one(payload)
@@ -126,10 +212,10 @@ class GuidelineReferenceService:
         query: Dict = {}
         
         if reference_group_id is not None:
-            query["reference_group_id"] = self._oid(reference_group_id, what="reference_group_id")
+            query["reference_group_id"] = self._resolve_reference_group_id(reference_group_id)
         
         if guideline_id is not None:
-            query["guideline_id"] = self._oid(guideline_id, what="guideline_id")
+            query["guideline_id"] = self._resolve_guideline_id(guideline_id)
         
         if reference_type is not None:
             query["type"] = reference_type.value
@@ -160,7 +246,8 @@ class GuidelineReferenceService:
         else:
             update_fields = dict(update_data)
         
-        update_fields.pop("_id", None)  # never overwrite mongo id
+        update_fields = self._normalize_reference_payload(update_fields)
+        update_fields = self._prepare_reference_for_mongo(update_fields)
         
         res = self.reference_collection.update_one({"_id": _id}, {"$set": update_fields})
         if res.matched_count == 0:
@@ -175,7 +262,7 @@ class GuidelineReferenceService:
             raise GuidelineReferenceNotFoundError(f"Reference not found: {reference_id}")
     
     def delete_references_by_guideline_id(self, guideline_id: Union[str, ObjectId]) -> Tuple[int, List[str]]:
-        gid = self._oid(guideline_id, what="guideline_id")
+        gid = self._resolve_guideline_id(guideline_id)
         
         refs = list(self.reference_collection.find({"guideline_id": gid}, {"_id": 1}))
         if not refs:
@@ -189,7 +276,7 @@ class GuidelineReferenceService:
             self,
             reference_group_id: Union[str, ObjectId],
     ) -> Tuple[int, List[str]]:
-        rgid = self._oid(reference_group_id, what="reference_group_id")
+        rgid = self._resolve_reference_group_id(reference_group_id)
         
         refs = list(self.reference_collection.find({"reference_group_id": rgid}, {"_id": 1}))
         if not refs:

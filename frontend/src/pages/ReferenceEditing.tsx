@@ -643,9 +643,6 @@ export default function ReferenceEditorPage() {
             >
               New from text
             </Button>
-            <Button variant="outlined" disabled sx={{textTransform: "none"}}>
-              New from PDF bbox
-            </Button>
           </Stack>
         </Stack>
       </Container>
@@ -902,7 +899,7 @@ export default function ReferenceEditorPage() {
       >
         <DialogTitle sx={{fontWeight: 800}}>
           <Typography variant="h5" sx={{fontWeight: 800}}>
-            Create text reference from search text
+            Create reference from search text
           </Typography>
           <IconButton
             aria-label="close"
