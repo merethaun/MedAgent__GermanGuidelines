@@ -218,6 +218,7 @@ At the current stage, the backend provides:
 - A basic system/chat scaffolding (router + service + models) for the simplified setup
 - Admin-only tool endpoints for:
     - Keyword extraction (YAKE, LLM, and comparison of both)
+    - SNOMED CT lookup helpers (synonyms, canonical form, keyword expansion, medical keyword extraction)
     - LLM interaction sessions (create session with LLM settings, chat continuation via session id, history/reset)
     - Deletion functions and creation / update for workflows, guidelines, and references
     - Reference-group chunking for retrieval-source preparation
@@ -246,3 +247,43 @@ Two new backend services are available under the `knowledge/vector` slice:
 An example collection setup is available in [example_vector_collection_ref_spec.json](./tests/assets/example_vector_collection_ref_spec.json).
 It assumes that the chunking-result reference group already exists, for example a `fixed_characters` chunking with size `500`.
 Whole-group ingestion creates chunk indices per guideline automatically. The ingest request can optionally target one guideline only, and guideline-level replacement always restarts chunk indices at `0`.
+
+## SNOMED tool endpoints
+
+The backend now exposes a separate SNOMED tool router under `/tools/snomed/*`:
+
+- `POST /tools/snomed/versions`
+- `POST /tools/snomed/synonyms`
+- `POST /tools/snomed/canonical`
+- `POST /tools/snomed/expand`
+- `POST /tools/snomed/medical-keywords`
+
+Each SNOMED request carries its own `llm_settings` in the JSON body. This is required because translation fallback and medical-keyword extraction run through the configured LLM for that specific request.
+
+The SNOMED instance can also be configured per request through `snomed_settings`, but useful defaults are now built in:
+
+- `base_url`: `http://snomed-lite:8080/fhir`
+- `version`: `http://snomed.info/sct/11000274103/version/20250515`
+- `display_language_de`: `de`
+- `display_language_en`: `en`
+
+These defaults can be overridden via environment variables such as `SNOMED_BASE_URL`, or per request when needed.
+
+Minimal example:
+
+```json
+{
+  "term": "Blinddarmentzündung",
+  "llm_settings": {
+    "model": "gpt-4.1-mini",
+    "api_key": "..."
+  },
+  "snomed_settings": {
+    "base_url": "http://snomed-lite:8080/fhir"
+  }
+}
+```
+
+If you use the defaults, you can omit `snomed_settings` entirely and send only `term` plus `llm_settings`.
+
+`POST /tools/snomed/versions` is useful for checking which SNOMED versions the configured server currently exposes. It first tries the FHIR `CodeSystem` endpoint and falls back to `/metadata` if necessary.

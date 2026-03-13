@@ -160,6 +160,13 @@ User maintenance (password reset, role changes, disabling users) is handled enti
 
 For backend architecture and implementation details, see [`backend/README.md`](./backend/README.md)
 
+### SNOMED CT
+
+Setup: get a license, and store the admin
+
+- Then: Let `snomed_loader.sh` download the file. Alternatively: download the file you want to use and place that in some data folder
+- This allows SNOMED CT lite to start up, serving the SNOMED CT version downloaded
+
 ---
 
 ## What comes next

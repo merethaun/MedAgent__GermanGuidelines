@@ -14,7 +14,7 @@ from .knowledge.guideline import BoundingBoxFinderService, GuidelineReferenceChu
 from .knowledge.vector import EmbeddingService, WeaviateVectorStoreService
 from .system import WorkflowSystemInteractionService, WorkflowSystemStorageService
 from .system.chat import ChatService
-from .tools import KeywordService, LLMInteractionService
+from .tools import KeywordService, LLMInteractionService, SnomedService
 
 _auth_service: Optional[AuthService] = None
 _token_service: Optional[TokenService] = TokenService()
@@ -27,6 +27,7 @@ _embedding_service: Optional[EmbeddingService] = None
 _weaviate_vector_store_service: Optional[WeaviateVectorStoreService] = None
 
 _keyword_service: Optional[KeywordService] = None
+_snomed_service: Optional[SnomedService] = None
 _llm_interaction_service: Optional[LLMInteractionService] = None
 
 _workflow_storage_service: Optional[WorkflowSystemStorageService] = None
@@ -88,6 +89,10 @@ def init_services() -> None:
     global _keyword_service
     if _keyword_service is None:
         _keyword_service = KeywordService()
+
+    global _snomed_service
+    if _snomed_service is None:
+        _snomed_service = SnomedService()
     
     global _llm_interaction_service
     if _llm_interaction_service is None:
@@ -161,6 +166,14 @@ def get_keyword_service() -> KeywordService:
         init_services()
     assert _keyword_service is not None
     return _keyword_service
+
+
+def get_snomed_service() -> SnomedService:
+    global _snomed_service
+    if _snomed_service is None:
+        init_services()
+    assert _snomed_service is not None
+    return _snomed_service
 
 
 def get_embedding_service() -> EmbeddingService:
