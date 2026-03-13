@@ -12,6 +12,13 @@ class RetrievalResult(BaseModel):
     retrieval: Optional[str] = Field(default=None, description="Retrieval result (as text)")
     
     reference_id: Optional[PyObjectId] = Field(default=None, description="MongoDB ID for reference entry")
+    weaviate_uuid: Optional[str] = Field(default=None, description="Weaviate object UUID for this hit")
+    weaviate_score: Optional[float] = Field(default=None, description="Weaviate search score for this hit")
+    weaviate_distance: Optional[float] = Field(default=None, description="Weaviate vector distance for this hit")
+    weaviate_properties: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Full property payload returned by Weaviate for this hit.",
+    )
     
     @model_validator(mode='after')
     def validate_either_source_or_reference(self) -> 'RetrievalResult':

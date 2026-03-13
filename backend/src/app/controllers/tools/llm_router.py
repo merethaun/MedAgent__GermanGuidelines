@@ -1,177 +1,28 @@
-from typing import Any, Dict, Optional
-
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from starlette.responses import StreamingResponse
 
 from app.constants.auth_config import ROLE_ADMIN
 from app.controllers.dependencies.auth_dependencies import require_roles
 from app.exceptions.tools import LLMChatSessionNotFoundError
-from app.models.tools.keyword_interaction import KeywordBothResponse, KeywordExtractionResponse, KeywordLLMRequest, KeywordYakeRequest
 from app.models.tools.llm_interaction import (
-    ChatHistoryResponse, ChatTextRequest, ChatTextResponse, CreateLLMSessionRequest, CreateLLMSessionResponse, LLMSettings,
+    ChatHistoryResponse,
+    ChatTextRequest,
+    ChatTextResponse,
+    CreateLLMSessionRequest,
+    CreateLLMSessionResponse,
+    LLMSettings,
     SessionSettingsResponse,
 )
-from app.services.service_registry import get_keyword_service, get_llm_interaction_service
-from app.services.tools import KeywordService, LLMInteractionService
+from app.services.service_registry import get_llm_interaction_service
+from app.services.tools import LLMInteractionService
 from app.utils.logging import setup_logger
 
 logger = setup_logger(__name__)
 
-tool_router = APIRouter()
+llm_router = APIRouter()
 
 
-#################################
-# ------- Keyword test ---------#
-#################################
-
-@tool_router.get(
-    "/keywords/defaults",
-    response_model=Dict[str, Any],
-    summary="Get keyword extraction defaults (admin only)",
-    description="Returns DEFAULT_KEYWORD_SETTINGS and prompt template info for debugging.",
-    dependencies=[Depends(require_roles(ROLE_ADMIN))],
-)
-def get_keyword_defaults() -> Dict[str, Any]:
-    try:
-        # Import from the service module to avoid duplicating constants
-        from app.services.tools.keyword_service import DEFAULT_KEYWORD_SETTINGS, KEYWORDS_PROMPT  # noqa
-        
-        return {
-            "DEFAULT_KEYWORD_SETTINGS": DEFAULT_KEYWORD_SETTINGS,
-            "KEYWORDS_PROMPT_preview": KEYWORDS_PROMPT[:500] + " ...",
-        }
-    except Exception as e:
-        logger.error("Failed to return keyword defaults: %s", str(e), exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@tool_router.post(
-    "/keywords/yake",
-    response_model=KeywordExtractionResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Extract keywords via YAKE (admin only)",
-    description="Runs KeywordService.extract_yake() on the provided text.",
-    dependencies=[Depends(require_roles(ROLE_ADMIN))],
-)
-def extract_keywords_yake(
-        req: KeywordYakeRequest,
-        service: KeywordService = Depends(get_keyword_service),
-) -> KeywordExtractionResponse:
-    try:
-        logger.info("Tools/Keywords YAKE: text_len=%d lang=%s", len(req.text), req.language)
-        
-        keywords = service.extract_yake(
-            text=req.text,
-            language=req.language,
-            min_keywords=req.min_keywords,
-            max_keywords=req.max_keywords,
-            max_n_gram_size=req.max_n_gram_size,
-            deduplication_threshold=req.deduplication_threshold,
-            ignore_terms=req.ignore_terms,
-            suppress_subphrases=req.suppress_subphrases,
-            headroom=req.headroom,
-        )
-        
-        return KeywordExtractionResponse(keywords=keywords)
-    
-    except Exception as e:
-        logger.error("YAKE keyword extraction failed: %s", str(e), exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@tool_router.post(
-    "/keywords/llm",
-    response_model=KeywordExtractionResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Extract keywords via LLM (admin only)",
-    description="Runs KeywordService.extract_llm() on the provided text and LLM settings.",
-    dependencies=[Depends(require_roles(ROLE_ADMIN))],
-)
-def extract_keywords_llm(
-        req: KeywordLLMRequest,
-        service: KeywordService = Depends(get_keyword_service),
-) -> KeywordExtractionResponse:
-    try:
-        logger.info(
-            "Tools/Keywords LLM: text_len=%d model=%s base_url=%s",
-            len(req.text),
-            getattr(req.llm_settings, "model", None),
-            getattr(req.llm_settings, "base_url", None),
-        )
-        
-        keywords = service.extract_llm(
-            req.text,
-            llm_settings=req.llm_settings,
-            scope_description=req.scope_description,
-            guidance_additions=req.guidance_additions,
-            ignore_terms=req.ignore_terms,
-            important_terms=req.important_terms,
-            examples=req.examples,
-            min_keywords=req.min_keywords,
-            max_keywords=req.max_keywords,
-        )
-        
-        return KeywordExtractionResponse(keywords=keywords)
-    
-    except Exception as e:
-        logger.error("LLM keyword extraction failed: %s", str(e), exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@tool_router.post(
-    "/keywords/both",
-    response_model=KeywordBothResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Extract keywords via YAKE + LLM (admin only)",
-    description="Runs both extractors and returns both lists plus overlap/union.",
-    dependencies=[Depends(require_roles(ROLE_ADMIN))],
-)
-def extract_keywords_both(
-        text: str = Query(..., description="Input text passage"),
-        language: str = Query("de", description="YAKE language code"),
-        min_keywords: Optional[int] = Query(None, ge=1, description="Minimum desired keywords"),
-        max_keywords: Optional[int] = Query(None, ge=1, description="Maximum desired keywords"),
-        # LLM settings passed in body (so you can keep secrets out of query params)
-        llm_settings: LLMSettings = Depends(),  # NOTE: if you prefer, move to request body with a BaseModel
-        service: KeywordService = Depends(get_keyword_service),
-) -> KeywordBothResponse:
-    """
-    Combined endpoint to quickly verify both keyword paths.
-
-    If you prefer a single body model, replace this signature with KeywordLLMRequest + extra YAKE fields.
-    """
-    try:
-        logger.info("Tools/Keywords BOTH: text_len=%d lang=%s", len(text), language)
-        
-        yake_kw = service.extract_yake(
-            text=text,
-            language=language,
-            min_keywords=min_keywords,
-            max_keywords=max_keywords,
-        )
-        
-        llm_kw = service.extract_llm(
-            text,
-            llm_settings=llm_settings,
-            min_keywords=min_keywords,
-            max_keywords=max_keywords,
-        )
-        
-        overlap = sorted(set(yake_kw).intersection(set(llm_kw)))
-        union = sorted(set(yake_kw).union(set(llm_kw)))
-        
-        return KeywordBothResponse(yake=yake_kw, llm=llm_kw, overlap=overlap, union=union)
-    
-    except Exception as e:
-        logger.error("BOTH keyword extraction failed: %s", str(e), exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-#################################
-# ------- LLM tool test --------#
-#################################
-
-@tool_router.post(
+@llm_router.post(
     "/llm/sessions",
     response_model=CreateLLMSessionResponse,
     status_code=status.HTTP_201_CREATED,
@@ -202,7 +53,7 @@ def create_llm_session(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@tool_router.post(
+@llm_router.post(
     "/llm/sessions/{session_id}/chat",
     response_model=ChatTextResponse,
     status_code=status.HTTP_200_OK,
@@ -228,7 +79,7 @@ def llm_chat_text(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@tool_router.post(
+@llm_router.post(
     "/llm/sessions/{session_id}/chat/stream",
     summary="Stream chat response for an existing session (admin only)",
     description="Streams the LLM response. The final response is still stored in session history.",
@@ -241,13 +92,13 @@ def llm_chat_stream(
 ):
     try:
         logger.info("Tools/LLM chat stream: session_id=%s prompt_chars=%d", session_id, len(req.prompt))
-        
+
         def gen():
             for piece in service.chat_stream_text(session_id=session_id, prompt=req.prompt):
                 yield piece
-        
+
         return StreamingResponse(gen(), media_type="text/plain")
-    
+
     except LLMChatSessionNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
@@ -257,7 +108,7 @@ def llm_chat_stream(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@tool_router.get(
+@llm_router.get(
     "/llm/sessions/{session_id}/history",
     response_model=ChatHistoryResponse,
     summary="Get session history (admin only)",
@@ -278,7 +129,7 @@ def llm_get_history(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@tool_router.get(
+@llm_router.get(
     "/llm/sessions/{session_id}/settings",
     response_model=SessionSettingsResponse,
     summary="Get session LLM settings (admin only)",
@@ -299,7 +150,7 @@ def llm_get_settings(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@tool_router.put(
+@llm_router.put(
     "/llm/sessions/{session_id}/settings",
     response_model=SessionSettingsResponse,
     summary="Update session LLM settings (admin only)",
@@ -327,7 +178,7 @@ def llm_update_settings(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@tool_router.post(
+@llm_router.post(
     "/llm/sessions/{session_id}/reset",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Reset session history (admin only)",
@@ -349,7 +200,7 @@ def llm_reset_history(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@tool_router.delete(
+@llm_router.delete(
     "/llm/sessions/{session_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete an LLM session (admin only)",

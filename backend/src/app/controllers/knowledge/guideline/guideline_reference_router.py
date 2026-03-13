@@ -20,6 +20,10 @@ from app.models.knowledge.guideline import (
     GuidelineReferenceChunkingRequest,
     GuidelineReferenceChunkingResult,
     GuidelineReferenceChunkingUpdateRequest,
+    ReferenceGroupKeywordUpdateRequest,
+    ReferenceKeywordEnrichmentRequest,
+    ReferenceKeywordEnrichmentResult,
+    ReferenceKeywordUpdateRequest,
     GuidelineReferenceGroup,
     ReferenceType,
 )
@@ -27,12 +31,14 @@ from app.models.knowledge.guideline.bounding_box_finder_api import BoundingBoxFi
 from app.services.knowledge.guideline import (
     BoundingBoxFinderService,
     GuidelineReferenceChunkingService,
+    GuidelineReferenceKeywordService,
     GuidelineReferenceService,
     GuidelineService,
 )
 from app.services.service_registry import (
     get_bounding_box_finder_service,
     get_guideline_reference_chunking_service,
+    get_guideline_reference_keyword_service,
     get_guideline_reference_service,
     get_guideline_service,
 )
@@ -190,6 +196,41 @@ def update_chunked_guideline(
     ) as e:
         raise HTTPException(status_code=404, detail=str(e))
     except (GuidelineReferenceChunkingError, InvalidChunkingConfigurationError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@guideline_reference_router.post(
+    "/groups/{reference_group_id}/keywords",
+    response_model=ReferenceKeywordEnrichmentResult,
+    status_code=status.HTTP_200_OK,
+    summary="Extract and store keywords for a reference group (admin only)",
+    description=(
+        "Writes extracted keywords back into `associated_keywords`. "
+        "Supports YAKE or LLM-based extraction and optional SNOMED synonym expansion. "
+        "You can optionally restrict processing to one guideline inside the selected group."
+    ),
+    dependencies=[Depends(require_roles(ROLE_ADMIN))],
+)
+def enrich_reference_keywords(
+        reference_group_id: str,
+        request: ReferenceGroupKeywordUpdateRequest,
+        service: GuidelineReferenceKeywordService = Depends(get_guideline_reference_keyword_service),
+) -> ReferenceKeywordEnrichmentResult:
+    try:
+        return service.enrich_keywords(
+            ReferenceKeywordEnrichmentRequest(
+                reference_group_id=reference_group_id,
+                guideline_id=request.guideline_id,
+                keyword_settings=request.keyword_settings,
+                expansion_settings=request.expansion_settings,
+                replace_existing=request.replace_existing,
+            ),
+        )
+    except (GuidelineNotFoundError, GuidelineReferenceGroupNotFoundError) as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -356,6 +397,39 @@ def patch_reference(
 ) -> GuidelineReference:
     try:
         return service.update_reference(reference_id, patch)
+    except (GuidelineNotFoundError, GuidelineReferenceGroupNotFoundError) as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@guideline_reference_router.post(
+    "/{reference_id}/keywords",
+    response_model=ReferenceKeywordEnrichmentResult,
+    status_code=status.HTTP_200_OK,
+    summary="Extract and store keywords for one reference (admin only)",
+    description=(
+        "Writes extracted keywords back into `associated_keywords` for the selected reference. "
+        "Supports YAKE or LLM-based extraction and optional SNOMED synonym expansion."
+    ),
+    dependencies=[Depends(require_roles(ROLE_ADMIN))],
+)
+def enrich_single_reference_keywords(
+        reference_id: str,
+        request: ReferenceKeywordUpdateRequest,
+        service: GuidelineReferenceKeywordService = Depends(get_guideline_reference_keyword_service),
+) -> ReferenceKeywordEnrichmentResult:
+    try:
+        return service.enrich_keywords(
+            ReferenceKeywordEnrichmentRequest(
+                reference_id=reference_id,
+                keyword_settings=request.keyword_settings,
+                expansion_settings=request.expansion_settings,
+                replace_existing=request.replace_existing,
+            ),
+        )
     except (GuidelineNotFoundError, GuidelineReferenceGroupNotFoundError) as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:

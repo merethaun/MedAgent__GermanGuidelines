@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # noinspection PyUnusedImports
 import app.services.system.components.component_registry
 # Other local imports
-from app.controllers import auth_router, embedding_router, snomed_router, system_router, tool_router, weaviate_router
+from app.controllers import auth_router, embedding_router, keyword_router, llm_router, snomed_router, system_router, weaviate_router
 from app.controllers.knowledge.guideline import guideline_reference_router, guideline_router
 from app.services.service_registry import init_services
 
@@ -43,7 +43,8 @@ main_app.include_router(embedding_router, prefix="/vector/embeddings", tags=["Ve
 main_app.include_router(weaviate_router, prefix="/vector/weaviate", tags=["WeaviateVectorStore"])
 
 # Tool testing
-main_app.include_router(tool_router, prefix="/tools", tags=["Tools"])
+main_app.include_router(keyword_router, prefix="/tools", tags=["Keywords"])
+main_app.include_router(llm_router, prefix="/tools", tags=["LLM"])
 main_app.include_router(snomed_router, prefix="/tools", tags=["SNOMED"])
 
 # Workflow system setup and interaction

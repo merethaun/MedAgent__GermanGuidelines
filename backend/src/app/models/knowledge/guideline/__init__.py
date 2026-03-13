@@ -3,8 +3,10 @@ from .guideline_reference import (
     BoundingBox, ChunkingStrategy, GuidelineDocumentHierarchy, GuidelineDocumentHierarchyEntry, GuidelineHierarchyEntry,
     GuidelineImageReference, GuidelineMetadataReference, GuidelineRecommendationReference, GuidelineReference,
     GuidelineReferenceChunkingRequest, GuidelineReferenceChunkingResult, GuidelineReferenceChunkingUpdateRequest,
-    GuidelineReferenceGroup, GuidelineStatementReference, GuidelineTableReference, GuidelineTextReference, REFERENCE_TYPE_MAP,
-    ReferenceType,
+    GuidelineReferenceGroup, GuidelineStatementReference, GuidelineTableReference, GuidelineTextReference,
+    KeywordExtractionStrategy, REFERENCE_TYPE_MAP, ReferenceKeywordEnrichmentItem, ReferenceKeywordEnrichmentRequest,
+    ReferenceKeywordEnrichmentResult, ReferenceGroupKeywordUpdateRequest, ReferenceKeywordExpansionSettings,
+    ReferenceKeywordSettings, ReferenceKeywordUpdateRequest, ReferenceType,
 )
 
 __all__ = [
@@ -13,5 +15,7 @@ __all__ = [
     "GuidelineImageReference", "GuidelineMetadataReference", "GuidelineRecommendationReference", "GuidelineReference",
     "GuidelineReferenceChunkingRequest", "GuidelineReferenceChunkingResult", "GuidelineReferenceChunkingUpdateRequest",
     "GuidelineReferenceGroup", "GuidelineStatementReference", "GuidelineTableReference", "GuidelineTextReference",
-    "REFERENCE_TYPE_MAP", "ReferenceType",
+    "KeywordExtractionStrategy", "REFERENCE_TYPE_MAP", "ReferenceKeywordEnrichmentItem", "ReferenceKeywordEnrichmentRequest",
+    "ReferenceKeywordEnrichmentResult", "ReferenceGroupKeywordUpdateRequest", "ReferenceKeywordExpansionSettings",
+    "ReferenceKeywordSettings", "ReferenceKeywordUpdateRequest", "ReferenceType",
 ]

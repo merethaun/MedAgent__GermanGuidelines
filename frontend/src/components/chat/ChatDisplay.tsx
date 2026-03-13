@@ -177,7 +177,13 @@ export default function ChatDisplay(props: {
   const [stickToBottom, setStickToBottom] = useState(true);
 
   const scrollToBottom = (behavior: ScrollBehavior = "auto") => {
-    bottomRef.current?.scrollIntoView({behavior, block: "end"});
+    const container = scrollRef.current;
+    if (!container) return;
+
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior,
+    });
   };
 
   // Default: scroll to bottom when the chat changes / mounts

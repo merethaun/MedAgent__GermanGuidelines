@@ -78,7 +78,7 @@ services:
     container_name: medagent-weaviate
     ports:
       - "8082:8080"
-      - "50052:50051"
+      - "50051:50051"
     environment:
       QUERY_DEFAULTS_LIMIT: 25
       AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"

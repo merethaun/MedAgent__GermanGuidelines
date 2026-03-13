@@ -112,9 +112,6 @@ export default function ReferenceList({references, selectedReferenceId, onSelect
           <Typography variant="h6" sx={{fontWeight: 800}}>
             References
           </Typography>
-          <Typography color="text.secondary">
-            {references.length} total
-          </Typography>
         </Box>
 
         {sortedReferences.length === 0 ? (

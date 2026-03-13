@@ -1,8 +1,15 @@
 import os
+from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlparse
-from types import SimpleNamespace
 
+from app.constants.weaviate_constants import (
+    SUPPORTED_DISTANCE_METRICS,
+    WEAVIATE_DATA_TYPE_MEMBER_MAP,
+    WEAVIATE_PROP_CHUNK_INDEX,
+    WEAVIATE_PROP_GUIDELINE_ID,
+    WEAVIATE_PROP_REFERENCE_ID,
+)
 from app.exceptions.knowledge.vector import VectorCollectionNotFoundError
 from app.models.knowledge.guideline import ReferenceType
 from app.models.knowledge.vector import (
@@ -25,28 +32,6 @@ from app.services.knowledge.vector.embedding_service import EmbeddingService
 from app.utils.logging import setup_logger
 
 logger = setup_logger(__name__)
-
-
-SUPPORTED_DISTANCE_METRICS = ["cosine", "dot", "l2-squared", "manhattan", "hamming"]
-WEAVIATE_DATA_TYPE_MEMBER_MAP = {
-    "text": "TEXT",
-    "text[]": "TEXT_ARRAY",
-    "int": "INT",
-    "int[]": "INT_ARRAY",
-    "number": "NUMBER",
-    "number[]": "NUMBER_ARRAY",
-    "boolean": "BOOL",
-    "boolean[]": "BOOL_ARRAY",
-    "date": "DATE",
-    "date[]": "DATE_ARRAY",
-    "uuid": "UUID",
-    "uuid[]": "UUID_ARRAY",
-    "geocoordinates": "GEO_COORDINATES",
-    "blob": "BLOB",
-    "phonenumber": "PHONE_NUMBER",
-    "object": "OBJECT",
-    "object[]": "OBJECT_ARRAY",
-}
 
 
 class WeaviateVectorStoreService:
@@ -173,9 +158,9 @@ class WeaviateVectorStoreService:
 
                 properties = {
                     collection.ingestion_mapping.content_property: content,
-                    "chunk_index": chunk_index_by_guideline.get(str(reference.guideline_id), 0),
-                    "guideline_id": str(reference.guideline_id),
-                    "reference_id": reference_id,
+                    WEAVIATE_PROP_CHUNK_INDEX: chunk_index_by_guideline.get(str(reference.guideline_id), 0),
+                    WEAVIATE_PROP_GUIDELINE_ID: str(reference.guideline_id),
+                    WEAVIATE_PROP_REFERENCE_ID: reference_id,
                 }
                 guideline = self._get_guideline_cached(str(reference.guideline_id), guideline_cache)
                 for property_name, mapped_field in collection.ingestion_mapping.mapped_properties.items():
@@ -187,7 +172,7 @@ class WeaviateVectorStoreService:
                     provider_settings=provider_settings or [],
                 )
                 inserted_object_count += 1
-                chunk_index_by_guideline[str(reference.guideline_id)] = properties["chunk_index"] + 1
+                chunk_index_by_guideline[str(reference.guideline_id)] = properties[WEAVIATE_PROP_CHUNK_INDEX] + 1
             except Exception:
                 failed_reference_ids.append(reference_id)
                 if not continue_on_error:
@@ -233,9 +218,9 @@ class WeaviateVectorStoreService:
 
                 properties = {
                     collection.ingestion_mapping.content_property: content,
-                    "chunk_index": chunk_index,
-                    "guideline_id": str(reference.guideline_id),
-                    "reference_id": reference_id,
+                    WEAVIATE_PROP_CHUNK_INDEX: chunk_index,
+                    WEAVIATE_PROP_GUIDELINE_ID: str(reference.guideline_id),
+                    WEAVIATE_PROP_REFERENCE_ID: reference_id,
                 }
                 guideline = self._get_guideline_cached(str(reference.guideline_id), guideline_cache)
                 for property_name, mapped_field in collection.ingestion_mapping.mapped_properties.items():
@@ -432,7 +417,7 @@ class WeaviateVectorStoreService:
     def _fetch_objects_by_guideline(client_collection, guideline_id: str):
         try:
             from weaviate.collections.classes.filters import Filter
-            filters = Filter.by_property("guideline_id").equal(str(guideline_id))
+            filters = Filter.by_property(WEAVIATE_PROP_GUIDELINE_ID).equal(str(guideline_id))
         except ImportError:
             filters = SimpleNamespace(target=SimpleNamespace(value=str(guideline_id)))
 

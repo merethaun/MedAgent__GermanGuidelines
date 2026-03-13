@@ -1,55 +1,43 @@
-import {useEffect, useMemo, useState} from "react";
-import {Alert, Box, Chip, Divider, List, ListItemButton, ListItemText, Paper, Stack, Typography,} from "@mui/material";
+import {useEffect, useMemo, useRef, useState} from "react";
+import {Alert, Box, Paper, Stack, Typography} from "@mui/material";
 
-import {normalizeObjectId, type RetrievalResult} from "../../api/system";
-import {type GuidelineReference, useReferenceApi} from "../../api/reference";
+import {type RetrievalResult, normalizeObjectId} from "../../api/system";
+import {type GuidelineEntry, type GuidelineReference, useReferenceApi} from "../../api/references";
+import ReferenceDetailView from "./ReferenceDetailView";
+import ReferenceList from "./ReferenceList";
+import ReferencePdfPanel from "./ReferencePdfPanel";
 
-function pagesFromBBoxes(ref?: GuidelineReference): string {
-  const pages = (ref?.bboxs ?? []).map((b) => b.page).filter((p) => typeof p === "number");
-  if (pages.length === 0) return "—";
-  const uniq = Array.from(new Set(pages)).sort((a, b) => a - b);
-  return uniq.join(", ");
+const HANDLE_HIT_PX = 12;
+const HANDLE_GRAB_THICKNESS_PX = 4;
+const HANDLE_GRAB_LENGTH_PX = 54;
+const DEFAULT_LIST_HEIGHT_RATIO = 0.26;
+const MIN_LIST_HEIGHT_RATIO = 0;
+const MAX_LIST_HEIGHT_RATIO = 0.55;
+const MIN_LIST_HEIGHT_PX = 0;
+const MIN_BOTTOM_HEIGHT_PX = 220;
+const DEFAULT_PDF_HEIGHT_RATIO = 0.48;
+const MIN_PDF_HEIGHT_RATIO = 0.28;
+const MAX_PDF_HEIGHT_RATIO = 0.72;
+const MIN_PDF_HEIGHT_PX = 240;
+const MIN_DETAIL_HEIGHT_PX = 0;
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
 }
 
-function hierarchyPath(ref?: GuidelineReference): string {
-  const h = ref?.document_hierarchy ?? [];
-  if (!h.length) return "—";
-  return h
-    .slice()
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    .map((x) => (x.heading_number ? `${x.heading_number} ` : "") + x.title)
-    .join(" > ");
-}
-
-function renderMainContent(ref: GuidelineReference): { title: string; body?: string } {
-  switch (ref.type) {
-    case "text":
-      return {title: "Text", body: ref.contained_text ?? ""};
-    case "table":
-      return {
-        title: ref.caption ? `Table — ${ref.caption}` : "Table",
-        body: ref.table_markdown ?? ref.plain_text ?? "",
-      };
-    case "image":
-      return {title: ref.caption ? `Image — ${ref.caption}` : "Image", body: ref.describing_text ?? ""};
-    case "recommendation":
-      return {
-        title: ref.recommendation_title ? `Recommendation — ${ref.recommendation_title}` : "Recommendation",
-        body: ref.recommendation_content ?? "",
-      };
-    case "statement":
-      return {
-        title: ref.statement_title ? `Statement — ${ref.statement_title}` : "Statement",
-        body: ref.statement_content ?? "",
-      };
-    case "metadata":
-      return {
-        title: ref.metadata_type ? `Metadata — ${ref.metadata_type}` : "Metadata",
-        body: ref.metadata_content ?? "",
-      };
-    default:
-      return {title: "Reference", body: ""};
-  }
+function GrabBar() {
+  return (
+    <Box
+      className="grab"
+      sx={{
+        width: HANDLE_GRAB_LENGTH_PX,
+        height: HANDLE_GRAB_THICKNESS_PX,
+        borderRadius: 999,
+        bgcolor: "text.disabled",
+        opacity: 0.35,
+      }}
+    />
+  );
 }
 
 export default function ReferenceDisplay(props: {
@@ -58,12 +46,12 @@ export default function ReferenceDisplay(props: {
   stickyHeader?: boolean;
   minHeightPx?: number;
 }) {
-  const {retrievalResults, height = "auto", stickyHeader = false, minHeightPx} = props;
-  const {getReferenceById} = useReferenceApi();
+  const {retrievalResults, height = "auto", minHeightPx} = props;
+  const {getGuidelineById, getReferenceById} = useReferenceApi();
 
   const refIds = useMemo(() => {
     const ids = (retrievalResults ?? [])
-      .map((r: any) => normalizeObjectId(r?.reference_id))
+      .map((result) => normalizeObjectId(result?.reference_id))
       .filter(Boolean);
     return Array.from(new Set(ids));
   }, [retrievalResults]);
@@ -71,9 +59,17 @@ export default function ReferenceDisplay(props: {
   const [selectedRefId, setSelectedRefId] = useState<string | null>(null);
   const [refById, setRefById] = useState<Record<string, GuidelineReference>>({});
   const [errById, setErrById] = useState<Record<string, string>>({});
+  const [guidelineById, setGuidelineById] = useState<Record<string, GuidelineEntry>>({});
+  const [listHeightRatio, setListHeightRatio] = useState(DEFAULT_LIST_HEIGHT_RATIO);
+  const [pdfHeightRatio, setPdfHeightRatio] = useState(DEFAULT_PDF_HEIGHT_RATIO);
+
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const lowerRef = useRef<HTMLDivElement | null>(null);
+  const listDragState = useRef<{startY: number; startRatio: number; contentHeight: number} | null>(null);
+  const pdfDragState = useRef<{startY: number; startRatio: number; contentHeight: number} | null>(null);
 
   useEffect(() => {
-    setSelectedRefId(refIds[0] ?? null);
+    setSelectedRefId((current) => (current && refIds.includes(current) ? current : (refIds[0] ?? null)));
   }, [refIds]);
 
   useEffect(() => {
@@ -81,7 +77,7 @@ export default function ReferenceDisplay(props: {
 
     async function fetchMissing() {
       const missing = refIds.filter((id) => !refById[id] && !errById[id]);
-      if (missing.length === 0) return;
+      if (!missing.length) return;
 
       await Promise.all(
         missing.map(async (id) => {
@@ -89,9 +85,9 @@ export default function ReferenceDisplay(props: {
             const ref = await getReferenceById(id);
             if (cancelled) return;
             setRefById((prev) => ({...prev, [id]: ref}));
-          } catch (e: any) {
+          } catch (error: any) {
             if (cancelled) return;
-            setErrById((prev) => ({...prev, [id]: e?.message ?? String(e)}));
+            setErrById((prev) => ({...prev, [id]: error?.message ?? String(error)}));
           }
         }),
       );
@@ -101,124 +97,209 @@ export default function ReferenceDisplay(props: {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refIds.join("|")]);
+  }, [errById, getReferenceById, refById, refIds]);
 
-  const selectedRef = selectedRefId ? refById[selectedRefId] : null;
+  const references = useMemo(
+    () => refIds.map((id) => refById[id]).filter((reference): reference is GuidelineReference => Boolean(reference)),
+    [refById, refIds],
+  );
+  const selectedRef = selectedRefId ? refById[selectedRefId] ?? null : null;
+  const selectedGuidelineId = useMemo(() => normalizeObjectId(selectedRef?.guideline_id ?? ""), [selectedRef]);
+  const selectedGuideline = selectedGuidelineId ? guidelineById[selectedGuidelineId] ?? null : null;
+
+  useEffect(() => {
+    if (!selectedGuidelineId || guidelineById[selectedGuidelineId]) return;
+
+    let cancelled = false;
+
+    async function loadGuideline() {
+      try {
+        const guideline = await getGuidelineById(selectedGuidelineId);
+        if (cancelled) return;
+        setGuidelineById((prev) => ({...prev, [selectedGuidelineId]: guideline}));
+      } catch {
+        if (cancelled) return;
+      }
+    }
+
+    void loadGuideline();
+    return () => {
+      cancelled = true;
+    };
+  }, [getGuidelineById, guidelineById, selectedGuidelineId]);
+
+  function onListResizeMouseDown(event: React.MouseEvent) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+
+    const container = rootRef.current;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const contentHeight = rect.height - HANDLE_HIT_PX;
+    if (contentHeight <= 0) return;
+
+    listDragState.current = {
+      startY: event.clientY,
+      startRatio: listHeightRatio,
+      contentHeight,
+    };
+
+    const onMove = (moveEvent: MouseEvent) => {
+      const state = listDragState.current;
+      if (!state) return;
+
+      const minRatio = Math.max(MIN_LIST_HEIGHT_RATIO, MIN_LIST_HEIGHT_PX / state.contentHeight);
+      const maxRatio = Math.min(MAX_LIST_HEIGHT_RATIO, 1 - MIN_BOTTOM_HEIGHT_PX / state.contentHeight);
+      const deltaRatio = (moveEvent.clientY - state.startY) / state.contentHeight;
+      setListHeightRatio(clamp(state.startRatio + deltaRatio, minRatio, Math.max(minRatio, maxRatio)));
+    };
+
+    const onUp = () => {
+      listDragState.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  function onPdfResizeMouseDown(event: React.MouseEvent) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+
+    const container = lowerRef.current;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const contentHeight = rect.height - HANDLE_HIT_PX;
+    if (contentHeight <= 0) return;
+
+    pdfDragState.current = {
+      startY: event.clientY,
+      startRatio: pdfHeightRatio,
+      contentHeight,
+    };
+
+    const onMove = (moveEvent: MouseEvent) => {
+      const state = pdfDragState.current;
+      if (!state) return;
+
+      const minRatio = Math.max(MIN_PDF_HEIGHT_RATIO, MIN_PDF_HEIGHT_PX / state.contentHeight);
+      const maxRatio = Math.min(MAX_PDF_HEIGHT_RATIO, 1 - MIN_DETAIL_HEIGHT_PX / state.contentHeight);
+      const deltaRatio = (state.startY - moveEvent.clientY) / state.contentHeight;
+      setPdfHeightRatio(clamp(state.startRatio + deltaRatio, minRatio, Math.max(minRatio, maxRatio)));
+    };
+
+    const onUp = () => {
+      pdfDragState.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  if (refIds.length === 0) {
+    return (
+      <Box sx={{height, minHeight: minHeightPx, p: 0}}>
+        <Alert severity="info">No references for this interaction.</Alert>
+      </Box>
+    );
+  }
 
   return (
-    <Paper
-      variant="outlined"
+    <Box
+      ref={rootRef}
       sx={{
         height,
+        minHeight: minHeightPx,
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
-        minHeight: minHeightPx,
       }}
     >
-      {/* Sticky header area */}
-      <Box
-        sx={{
-          p: 2,
-          ...(stickyHeader
-            ? {position: "sticky", top: 0, zIndex: 2, bgcolor: "background.paper"}
-            : null),
-        }}
-      >
-        <Typography variant="h6" sx={{fontWeight: 800}}>
-          References
-        </Typography>
-        <Divider sx={{mt: 1.5}}/>
+      <Box sx={{minHeight: MIN_LIST_HEIGHT_PX, height: `${listHeightRatio * 100}%`, pb: 1.5}}>
+        <ReferenceList
+          references={references}
+          selectedReferenceId={selectedRefId ?? ""}
+          onSelect={setSelectedRefId}
+        />
       </Box>
 
-      {refIds.length === 0 ? (
-        <Box sx={{p: 2}}>
-          <Typography sx={{fontWeight: 700}}>No references for this interaction</Typography>
-          <Typography color="text.secondary">
-            Select another interaction on the left to see its retrieval output.
-          </Typography>
-        </Box>
+      <Box
+        sx={{
+          height: HANDLE_HIT_PX,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "ns-resize",
+          borderRadius: 2,
+          mb: 1.5,
+          "&:hover": {bgcolor: "action.hover"},
+          "&:hover .grab": {opacity: 0.9},
+        }}
+        onMouseDown={onListResizeMouseDown}
+        title="Drag to resize reference list"
+      >
+        <GrabBar />
+      </Box>
+
+      {selectedRefId && errById[selectedRefId] ? (
+        <Alert severity="error">{errById[selectedRefId]}</Alert>
       ) : (
-        <Stack spacing={2} sx={{flex: 1, overflow: "hidden", p: 2}}>
-          {/* List (scrollable) */}
-          <Paper variant="outlined" sx={{p: 0, overflow: "auto", maxHeight: "clamp(140px, 32%, 240px)", minHeight: 120}}>
-            <List dense disablePadding>
-              {refIds.map((id) => {
-                const ref = refById[id];
-                const err = errById[id];
-                const label = ref ? `${ref.type} — p. ${pagesFromBBoxes(ref)}` : err ? "Failed to load" : "Loading…";
+        <Box ref={lowerRef} sx={{minHeight: MIN_BOTTOM_HEIGHT_PX, flex: "1 1 auto", display: "flex", flexDirection: "column", overflow: "hidden"}}>
+          <Box sx={{minHeight: MIN_DETAIL_HEIGHT_PX, height: `${(1 - pdfHeightRatio) * 100}%`, pb: 1.5, overflow: "hidden"}}>
+            <ReferenceDetailView
+              reference={selectedRef}
+              guideline={selectedGuideline}
+              emptyStateText={selectedRefId ? "Loading reference..." : "Select a reference."}
+            />
+          </Box>
 
-                return (
-                  <ListItemButton key={id} selected={id === selectedRefId} onClick={() => setSelectedRefId(id)}>
-                    <ListItemText
-                      primary={label}
-                      secondary={id}
-                      primaryTypographyProps={{noWrap: true}}
-                      secondaryTypographyProps={{noWrap: true}}
-                    />
-                  </ListItemButton>
-                );
-              })}
-            </List>
-          </Paper>
+          <Box
+            sx={{
+              height: HANDLE_HIT_PX,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "ns-resize",
+              borderRadius: 2,
+              mb: 1.5,
+              "&:hover": {bgcolor: "action.hover"},
+              "&:hover .grab": {opacity: 0.9},
+            }}
+            onMouseDown={onPdfResizeMouseDown}
+            title="Drag to resize PDF area"
+          >
+            <GrabBar />
+          </Box>
 
-          {/* Detail (scrollable) */}
-          <Paper variant="outlined" sx={{p: 1.5, flex: 1, overflow: "auto"}}>
-            {!selectedRefId ? (
-              <Typography color="text.secondary">Select a reference.</Typography>
-            ) : errById[selectedRefId] ? (
-              <Alert severity="error">{errById[selectedRefId]}</Alert>
-            ) : !selectedRef ? (
-              <Typography color="text.secondary">Loading reference…</Typography>
+          <Box sx={{minHeight: MIN_PDF_HEIGHT_PX, height: `${pdfHeightRatio * 100}%`, flex: "0 0 auto"}}>
+            {selectedGuidelineId && selectedRef ? (
+              <ReferencePdfPanel
+                guidelineId={selectedGuidelineId}
+                guideline={selectedGuideline}
+                references={[selectedRef]}
+                selectedReferenceId={selectedRefId}
+                onSelect={setSelectedRefId}
+                showHeader={false}
+                showReferenceToggle={false}
+                framed
+              />
             ) : (
-              <Stack spacing={1}>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{flexWrap: "wrap"}}>
-                  <Chip label={selectedRef.type} size="small"/>
-                  <Chip
-                    label={`Guideline: ${normalizeObjectId((selectedRef as any).guideline_id)}`}
-                    size="small"
-                    variant="outlined"
-                  />
-                  <Chip label={`Pages: ${pagesFromBBoxes(selectedRef)}`} size="small" variant="outlined"/>
-                </Stack>
-
-                <Typography variant="subtitle2" sx={{fontWeight: 800}}>
-                  Document path
-                </Typography>
-                <Typography color="text.secondary" sx={{whiteSpace: "pre-wrap"}}>
-                  {hierarchyPath(selectedRef)}
-                </Typography>
-
-                {selectedRef.note ? (
-                  <>
-                    <Typography variant="subtitle2" sx={{fontWeight: 800}}>
-                      Note
-                    </Typography>
-                    <Typography sx={{whiteSpace: "pre-wrap"}}>{selectedRef.note}</Typography>
-                  </>
-                ) : null}
-
-                <Divider/>
-
-                {(() => {
-                  const {title, body} = renderMainContent(selectedRef);
-                  return (
-                    <>
-                      <Typography variant="subtitle2" sx={{fontWeight: 800}}>
-                        {title}
-                      </Typography>
-                      <Typography sx={{whiteSpace: "pre-wrap"}} color={body?.trim() ? "text.primary" : "text.secondary"}>
-                        {body?.trim() ? body : "—"}
-                      </Typography>
-                    </>
-                  );
-                })()}
-              </Stack>
+              <Paper
+                variant="outlined"
+                sx={{height: "100%", display: "flex", alignItems: "center", justifyContent: "center", p: 2}}
+              >
+                <Typography color="text.secondary">Select a reference to load its PDF.</Typography>
+              </Paper>
             )}
-          </Paper>
-        </Stack>
+          </Box>
+        </Box>
       )}
-    </Paper>
+    </Box>
   );
 }

@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Literal, Optional, Tuple, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator, model_validator
 
 from app.models.common.py_object_id import PyObjectId
+from app.models.tools.llm_interaction import LLMSettings
+from app.models.tools.snomed_interaction import SnomedSettings
 
 
 # ---- Options for reference types ----
@@ -144,7 +146,7 @@ class GuidelineReferenceBase(BaseModel, ABC):
         arbitrary_types_allowed=True,
         populate_by_name=True,
     )
-    
+
     @abstractmethod
     def extract_content(self) -> str:
         raise NotImplementedError
@@ -333,6 +335,110 @@ class GuidelineReferenceChunkingResult(BaseModel):
     source_reference_count: int = Field(description="Number of source references considered")
     created_reference_count: int = Field(description="Number of references inserted into the target group")
     chunked_text_reference_count: int = Field(description="Number of text references that resulted in more than one chunk")
+
+
+class KeywordExtractionStrategy(str, Enum):
+    YAKE = "yake"
+    LLM = "llm"
+
+
+class ReferenceKeywordSettings(BaseModel):
+    strategy: KeywordExtractionStrategy = Field(
+        default=KeywordExtractionStrategy.YAKE,
+        description="Keyword extraction strategy used for each reference.",
+    )
+    language: str = Field("de", description="YAKE language code.")
+    min_keywords: Optional[int] = Field(None, ge=1, description="Minimum number of keywords to target.")
+    max_keywords: Optional[int] = Field(None, ge=1, description="Maximum number of keywords to keep before optional expansion.")
+    max_n_gram_size: int = Field(3, ge=1, le=6, description="YAKE n-gram length.")
+    deduplication_threshold: float = Field(0.9, ge=0.0, le=1.0, description="YAKE deduplication threshold.")
+    ignore_terms: Optional[List[str]] = Field(None, description="Additional terms to ignore.")
+    suppress_subphrases: bool = Field(True, description="Drop single terms that are contained in longer kept phrases.")
+    headroom: int = Field(5, ge=0, le=50, description="Extra YAKE candidates to request.")
+    llm_settings: Optional[LLMSettings] = Field(
+        default=None,
+        description="Required for LLM-based extraction and SNOMED expansion fallback.",
+    )
+    scope_description: Optional[str] = Field(None, description="Optional prompt scope override for LLM keyword extraction.")
+    guidance_additions: Optional[List[str]] = Field(None, description="Optional extra prompt guidance for LLM keyword extraction.")
+    important_terms: Optional[List[str]] = Field(None, description="Terms that should be emphasized in LLM extraction.")
+    examples: Optional[List[Dict[str, Any]]] = Field(None, description="Few-shot examples for LLM extraction.")
+
+
+class ReferenceKeywordExpansionSettings(BaseModel):
+    enabled: bool = Field(False, description="Expand extracted keywords via SNOMED.")
+    snomed_settings: SnomedSettings = Field(
+        default_factory=SnomedSettings,
+        description="SNOMED settings used when keyword expansion is enabled.",
+    )
+    allow_english_fallback: bool = Field(True, description="Allow English fallback during SNOMED synonym lookup.")
+    include_original: bool = Field(True, description="Keep original extracted keywords alongside expanded synonyms.")
+
+
+class ReferenceKeywordEnrichmentRequest(BaseModel):
+    reference_id: Optional[PyObjectId] = Field(default=None, description="Single reference to enrich.")
+    reference_group_id: Optional[PyObjectId] = Field(default=None, description="Reference group to enrich.")
+    guideline_id: Optional[PyObjectId] = Field(
+        default=None,
+        description="Optional guideline restriction when enriching a whole reference group.",
+    )
+    keyword_settings: ReferenceKeywordSettings = Field(..., description="Keyword extraction settings.")
+    expansion_settings: ReferenceKeywordExpansionSettings = Field(
+        default_factory=ReferenceKeywordExpansionSettings,
+        description="Optional SNOMED expansion settings.",
+    )
+    replace_existing: bool = Field(
+        default=True,
+        description="Replace `associated_keywords` instead of merging with any existing values.",
+    )
+
+    @model_validator(mode="after")
+    def validate_target_combination(self):
+        reference_id = self.reference_id
+        reference_group_id = self.reference_group_id
+        if bool(reference_id) == bool(reference_group_id):
+            raise ValueError("Provide exactly one of reference_id or reference_group_id.")
+        return self
+
+
+class ReferenceKeywordUpdateRequest(BaseModel):
+    keyword_settings: ReferenceKeywordSettings = Field(..., description="Keyword extraction settings.")
+    expansion_settings: ReferenceKeywordExpansionSettings = Field(
+        default_factory=ReferenceKeywordExpansionSettings,
+        description="Optional SNOMED expansion settings.",
+    )
+    replace_existing: bool = Field(
+        default=True,
+        description="Replace `associated_keywords` instead of merging with any existing values.",
+    )
+
+
+class ReferenceGroupKeywordUpdateRequest(BaseModel):
+    guideline_id: Optional[PyObjectId] = Field(
+        default=None,
+        description="Optional guideline restriction inside the selected reference group.",
+    )
+    keyword_settings: ReferenceKeywordSettings = Field(..., description="Keyword extraction settings.")
+    expansion_settings: ReferenceKeywordExpansionSettings = Field(
+        default_factory=ReferenceKeywordExpansionSettings,
+        description="Optional SNOMED expansion settings.",
+    )
+    replace_existing: bool = Field(
+        default=True,
+        description="Replace `associated_keywords` instead of merging with any existing values.",
+    )
+
+
+class ReferenceKeywordEnrichmentItem(BaseModel):
+    reference_id: PyObjectId = Field(description="Updated reference id.")
+    extracted_keywords: List[str] = Field(description="Keywords extracted before SNOMED expansion.")
+    stored_keywords: List[str] = Field(description="Keywords written to the reference.")
+
+
+class ReferenceKeywordEnrichmentResult(BaseModel):
+    processed_reference_count: int = Field(description="Number of references enriched.")
+    skipped_reference_ids: List[str] = Field(default_factory=list, description="References skipped because no content/keywords were found.")
+    references: List[ReferenceKeywordEnrichmentItem] = Field(description="Per-reference enrichment result.")
 
 
 # ---- Polymorphic union for API routing / responses ----

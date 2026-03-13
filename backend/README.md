@@ -165,12 +165,73 @@ The currently available component variants are:
 | `start`      | [`StartComponent`](./src/app/services/system/components/structure/start_component.py) | Required as start to provide user input                                                                                                                                                                             |
 | `end`        | [`EndComponent`](./src/app/services/system/components/structure/end_component.py)     | Required as end to define generator output (text) and retrieval result (references)                                                                                                                                 |
 | `generator`  | [`LLMGenerator`](./src/app/services/system/components/generator/generator.py)         | Executes the actual text generation step by sending a resolved prompt to the configured LLM and returning the model response. The LLM is configured via [`LLMSettings`](./src/app/models/tools/llm_interaction.py). |
+| `retriever/vector_retriever` | [`VectorRetriever`](./src/app/services/system/components/retriever/vector_retriever.py) | Queries a Weaviate collection during workflow execution and returns workflow-native retrieval references. Search settings are validated through [`VectorRetrieverSettings`](./src/app/models/system/workflow_retriever.py). |
+| `retriever/multi_queries_vector_retriever` | [`MultiQueriesVectorRetriever`](./src/app/services/system/components/retriever/vector_retriever.py) | Executes multiple weighted Weaviate searches, merges duplicate hits, and returns the combined retrieval references. Settings are validated through [`MultiQueryVectorRetrieverSettings`](./src/app/models/system/workflow_retriever.py). |
 
 ### Example workflow
 
 Create a workflow by posting a JSON object to POST `<backend>/system/workflow` that looks like:
 
 - [Generator-only workflow](./tests/assets/example_gen_workflow.json) (! need to configure LLM settings)
+- [Vector retrieval + generator workflow](./tests/assets/example_vector_retriever_workflow.json) (! need to configure LLM settings and ensure the Weaviate collection exists)
+- [Multi-query vector retrieval + generator workflow](./tests/assets/example_multi_queries_vector_retriever_workflow.json) (! need to configure LLM settings and ensure the Weaviate collection exists)
+
+### Retriever component notes
+
+The workflow retriever abstraction now exposes one primary output:
+
+- `component_id.references`: list of retrieval references compatible with `RetrievalResult`
+
+The vector retriever additionally stores `component_id.latency`, so the `end` component can forward retrieval latency via `retrieval_latency_key`.
+
+`retriever/vector_retriever` expects:
+
+- `query`: template resolved against workflow data
+- `settings`: object validated by `VectorRetrieverSettings`
+
+Minimal settings shape:
+
+```json
+{
+  "weaviate_collection": "OpenSource_StructuredGuidelineFixedCharacters500_RefSpec",
+  "vector_name": "text",
+  "limit": 5,
+  "mode": "vector",
+  "content_property": "text",
+  "reference_id_property": "reference_id",
+  "source_id_property": "guideline_id"
+}
+```
+
+`retriever/multi_queries_vector_retriever` expects:
+
+- `settings`: object validated by `MultiQueryVectorRetrieverSettings`
+- `settings.queries`: list of weighted query definitions, each with `query`, `vector_name`, and optional hybrid-search knobs
+
+Minimal settings shape:
+
+```json
+{
+  "weaviate_collection": "OpenSource_StructuredGuidelineFixedCharacters500_RefSpec",
+  "limit": 5,
+  "per_query_limit": 8,
+  "queries": [
+    {
+      "query": "{start.current_user_input}",
+      "vector_name": "text",
+      "weight": 1.0
+    },
+    {
+      "query": "{start.current_user_input}",
+      "vector_name": "headers",
+      "weight": 0.4
+    }
+  ],
+  "content_property": "text",
+  "reference_id_property": "reference_id",
+  "source_id_property": "guideline_id"
+}
+```
 
 ---
 
@@ -221,6 +282,7 @@ At the current stage, the backend provides:
     - SNOMED CT lookup helpers (synonyms, canonical form, keyword expansion, medical keyword extraction)
     - LLM interaction sessions (create session with LLM settings, chat continuation via session id, history/reset)
     - Deletion functions and creation / update for workflows, guidelines, and references
+    - Keyword enrichment for stored references / reference groups
     - Reference-group chunking for retrieval-source preparation
 - Admin-only vector endpoints for:
     - Embedding via registered vectorizers
@@ -247,6 +309,10 @@ Two new backend services are available under the `knowledge/vector` slice:
 An example collection setup is available in [example_vector_collection_ref_spec.json](./tests/assets/example_vector_collection_ref_spec.json).
 It assumes that the chunking-result reference group already exists, for example a `fixed_characters` chunking with size `500`.
 Whole-group ingestion creates chunk indices per guideline automatically. The ingest request can optionally target one guideline only, and guideline-level replacement always restarts chunk indices at `0`.
+
+For workflow orchestration, the matching ready-to-use workflow example is [example_vector_retriever_workflow.json](./tests/assets/example_vector_retriever_workflow.json).
+It is configured against the Weaviate collection `OpenSource_StructuredGuidelineFixedCharacters500_RefSpec`.
+For multiple weighted searches against the same collection, see [example_multi_queries_vector_retriever_workflow.json](./tests/assets/example_multi_queries_vector_retriever_workflow.json).
 
 ## SNOMED tool endpoints
 
@@ -287,3 +353,14 @@ Minimal example:
 If you use the defaults, you can omit `snomed_settings` entirely and send only `term` plus `llm_settings`.
 
 `POST /tools/snomed/versions` is useful for checking which SNOMED versions the configured server currently exposes. It first tries the FHIR `CodeSystem` endpoint and falls back to `/metadata` if necessary.
+
+## Reference keyword enrichment
+
+The backend exposes two keyword-enrichment endpoints that write extracted keywords into `associated_keywords`:
+
+- `POST /guideline_references/{reference_id}/keywords`
+- `POST /guideline_references/groups/{reference_group_id}/keywords`
+
+The group endpoint can optionally be restricted to a single `guideline_id`.
+
+Extraction supports YAKE or LLM settings, and the extracted keywords can optionally be expanded via SNOMED before being stored.

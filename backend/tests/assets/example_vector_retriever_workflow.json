@@ -1,0 +1,68 @@
+{
+  "name": "Vector Retrieval + Generator",
+  "nodes": [
+    {
+      "component_id": "start",
+      "name": "Start node",
+      "type": "start",
+      "parameters": {}
+    },
+    {
+      "component_id": "retriever",
+      "name": "Guideline vector retriever",
+      "type": "retriever/vector_retriever",
+      "parameters": {
+        "query": "{start.current_user_input}",
+        "settings": {
+          "weaviate_collection": "OpenSource_StructuredGuidelineFixedCharacters500_RefSpec",
+          "vector_name": "text",
+          "limit": 5,
+          "mode": "vector",
+          "content_property": "text",
+          "reference_id_property": "reference_id",
+          "source_id_property": "guideline_id"
+        }
+      }
+    },
+    {
+      "component_id": "generator",
+      "name": "OpenAI Generator",
+      "type": "generator",
+      "parameters": {
+        "system_prompt": "Answer the question based on the retrieved guideline references. If the evidence is insufficient, say so clearly.",
+        "llm_settings": {
+          "model": "gpt-4o-mini",
+          "api_key": "TODO",
+          "base_url": "https://api.openai.com/v1",
+          "max_tokens": 512,
+          "timeout_s": 60
+        },
+        "prompt": "Question: {start.current_user_input}\n\nRetrieved references:\n{retriever.references}"
+      }
+    },
+    {
+      "component_id": "end",
+      "name": "End node",
+      "type": "end",
+      "parameters": {
+        "generation_key": "{generator.response}",
+        "retrieval_key": "{retriever.references}",
+        "retrieval_latency_key": "{retriever.latency}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "start",
+      "target": "retriever"
+    },
+    {
+      "source": "retriever",
+      "target": "generator"
+    },
+    {
+      "source": "generator",
+      "target": "end"
+    }
+  ]
+}

@@ -31,6 +31,12 @@ export type GuidelineEntry = {
   awmf_class?: string | null;
   title: string;
   keywords?: string[];
+  download_information?: {
+    url?: string | null;
+    download_date?: string | null;
+    file_path?: string | null;
+    page_count?: number | null;
+  } | null;
 };
 
 export type BoundingBox = {

@@ -10,7 +10,13 @@ from app.constants.mongodb_config import (
 )
 from app.utils.mongo_collection_setup import get_collection, init_mongo
 from .auth import AuthService, TokenService
-from .knowledge.guideline import BoundingBoxFinderService, GuidelineReferenceChunkingService, GuidelineReferenceService, GuidelineService
+from .knowledge.guideline import (
+    BoundingBoxFinderService,
+    GuidelineReferenceChunkingService,
+    GuidelineReferenceKeywordService,
+    GuidelineReferenceService,
+    GuidelineService,
+)
 from .knowledge.vector import EmbeddingService, WeaviateVectorStoreService
 from .system import WorkflowSystemInteractionService, WorkflowSystemStorageService
 from .system.chat import ChatService
@@ -23,6 +29,7 @@ _bounding_box_finder_service: Optional[BoundingBoxFinderService] = None
 _guideline_service: Optional[GuidelineService] = None
 _guideline_reference_service: Optional[GuidelineReferenceService] = None
 _guideline_reference_chunking_service: Optional[GuidelineReferenceChunkingService] = None
+_guideline_reference_keyword_service: Optional[GuidelineReferenceKeywordService] = None
 _embedding_service: Optional[EmbeddingService] = None
 _weaviate_vector_store_service: Optional[WeaviateVectorStoreService] = None
 
@@ -93,6 +100,14 @@ def init_services() -> None:
     global _snomed_service
     if _snomed_service is None:
         _snomed_service = SnomedService()
+
+    global _guideline_reference_keyword_service
+    if _guideline_reference_keyword_service is None:
+        _guideline_reference_keyword_service = GuidelineReferenceKeywordService(
+            reference_service=_guideline_reference_service,
+            keyword_service=_keyword_service,
+            snomed_service=_snomed_service,
+        )
     
     global _llm_interaction_service
     if _llm_interaction_service is None:
@@ -158,6 +173,14 @@ def get_guideline_reference_chunking_service() -> GuidelineReferenceChunkingServ
         init_services()
     assert _guideline_reference_chunking_service is not None
     return _guideline_reference_chunking_service
+
+
+def get_guideline_reference_keyword_service() -> GuidelineReferenceKeywordService:
+    global _guideline_reference_keyword_service
+    if _guideline_reference_keyword_service is None:
+        init_services()
+    assert _guideline_reference_keyword_service is not None
+    return _guideline_reference_keyword_service
 
 
 def get_keyword_service() -> KeywordService:

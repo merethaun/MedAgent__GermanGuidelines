@@ -2,7 +2,7 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import {useNavigate, useParams} from "react-router-dom";
 
 import CloseIcon from "@mui/icons-material/Close";
-import {Alert, Box, Button, CircularProgress, Container, Stack, Typography, useTheme} from "@mui/material";
+import {Alert, Box, Button, CircularProgress, Container, Snackbar, Stack, Typography, useTheme} from "@mui/material";
 import IconButton from "@mui/material/IconButton";
 
 import Dialog from "@mui/material/Dialog";
@@ -132,6 +132,7 @@ export default function ChatInteractionPage() {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorToastOpen, setErrorToastOpen] = useState(false);
 
   const [chat, setChat] = useState<Chat | null>(null);
   const [workflowName, setWorkflowName] = useState<string | undefined>(undefined);
@@ -429,6 +430,7 @@ export default function ChatInteractionPage() {
       } catch (e: any) {
         if (cancelled) return;
         setError(e?.message ?? String(e));
+        setErrorToastOpen(true);
         setChat(null);
         setWorkflowName(undefined);
       } finally {
@@ -472,6 +474,7 @@ export default function ChatInteractionPage() {
       setSelectedInteractionIndex(idx >= 0 ? idx : -1);
     } catch (e: any) {
       setError(e?.message ?? String(e));
+      setErrorToastOpen(true);
     } finally {
       setSending(false);
     }
@@ -540,7 +543,24 @@ export default function ChatInteractionPage() {
         </DialogContent>
       </Dialog>
 
-      {error && <Alert severity="error">{error}</Alert>}
+      <Snackbar
+        open={errorToastOpen && Boolean(error)}
+        autoHideDuration={8000}
+        onClose={(_, reason) => {
+          if (reason === "clickaway") return;
+          setErrorToastOpen(false);
+        }}
+        anchorOrigin={{vertical: "bottom", horizontal: "right"}}
+      >
+        <Alert
+          severity="error"
+          variant="filled"
+          onClose={() => setErrorToastOpen(false)}
+          sx={{maxWidth: 720}}
+        >
+          {error}
+        </Alert>
+      </Snackbar>
 
       {/* Centered wrapper: adjustable overall width (can exceed viewport) */}
       <Box
