@@ -1,15 +1,20 @@
-FROM python:3.13-slim
+FROM python:3.12-slim
 
 ARG MODE=build
 ENV MODE=${MODE}
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PIP_NO_CACHE_DIR=1
+ENV HF_HOME=/models/huggingface
+ENV TRANSFORMERS_CACHE=/models/huggingface/transformers
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libgomp1 && \
     update-ca-certificates && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && pip install -r requirements.txt
 
 COPY src/ /src/
 

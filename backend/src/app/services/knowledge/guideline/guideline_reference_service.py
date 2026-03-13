@@ -285,3 +285,24 @@ class GuidelineReferenceService:
         reference_ids = [str(d["_id"]) for d in refs]
         res = self.reference_collection.delete_many({"reference_group_id": rgid})
         return res.deleted_count, reference_ids
+
+    def delete_references_by_group_and_guideline(
+            self,
+            reference_group_id: Union[str, ObjectId],
+            guideline_id: Union[str, ObjectId],
+    ) -> Tuple[int, List[str]]:
+        rgid = self._resolve_reference_group_id(reference_group_id)
+        gid = self._resolve_guideline_id(guideline_id)
+
+        refs = list(
+            self.reference_collection.find(
+                {"reference_group_id": rgid, "guideline_id": gid},
+                {"_id": 1},
+            ),
+        )
+        if not refs:
+            return 0, []
+
+        reference_ids = [str(d["_id"]) for d in refs]
+        res = self.reference_collection.delete_many({"reference_group_id": rgid, "guideline_id": gid})
+        return res.deleted_count, reference_ids

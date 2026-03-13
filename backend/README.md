@@ -183,6 +183,28 @@ Once logged in, a new tab with the name "reference management" will appear in th
 Here, a new reference group can be created, and a guideline can be selected, allowing to now manage and add new references.
 How to create a new one: currently only implemented with the bounding box text search.
 
+If the retrieval source should work on chunks instead of the original references, create a second reference group as a
+chunking result. Chunking only splits narrative text references; all other reference types stay as they are. The new
+chunks get their own bounding boxes again, restricted to the page span of the original reference.
+
+Available chunking strategies:
+
+- `fixed_characters`
+- `sentence`
+- `paragraph`
+
+Typical setup:
+
+1. create a structured reference group for the guideline
+2. create a chunking-result reference group from it, for example with `fixed_characters` and size `500`
+3. use that chunking-result reference group as the basis for the vector collection
+
+For the vector setup, see [example_vector_collection_ref_spec.json](./tests/assets/example_vector_collection_ref_spec.json).
+That example is shaped for the collection-creation endpoint and includes the ingestion mapping used by the related reference-group ingestion endpoint.
+
+- TODOs are to include the actual reference group ID
+- And also: remove the `_related_ingest_reference_group_request_example`, this is for when actually filling the vector database
+
 ## Current scope
 
 At the current stage, the backend provides:
@@ -198,6 +220,11 @@ At the current stage, the backend provides:
     - Keyword extraction (YAKE, LLM, and comparison of both)
     - LLM interaction sessions (create session with LLM settings, chat continuation via session id, history/reset)
     - Deletion functions and creation / update for workflows, guidelines, and references
+    - Reference-group chunking for retrieval-source preparation
+- Admin-only vector endpoints for:
+    - Embedding via registered vectorizers
+    - Creating Weaviate manual-vector collections
+    - Inserting and searching vector objects
 
 Full database integration, RAG pipelines, and evaluation logic will be added incrementally.
 
@@ -208,3 +235,14 @@ Full database integration, RAG pipelines, and evaluation logic will be added inc
 - All configuration is provided via environment variables
 - The backend is designed to run fully inside Docker
 - Services are initialized once and injected via FastAPI dependencies
+
+## Vector services
+
+Two new backend services are available under the `knowledge/vector` slice:
+
+- `EmbeddingService`: provider-backed text embeddings
+- `WeaviateVectorStoreService`: Weaviate collection setup, insert, and search with stored metadata in MongoDB
+
+An example collection setup is available in [example_vector_collection_ref_spec.json](./tests/assets/example_vector_collection_ref_spec.json).
+It assumes that the chunking-result reference group already exists, for example a `fixed_characters` chunking with size `500`.
+Whole-group ingestion creates chunk indices per guideline automatically. The ingest request can optionally target one guideline only, and guideline-level replacement always restarts chunk indices at `0`.

@@ -1,18 +1,32 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 # Core backend API
 fastapi
 uvicorn
+pydantic # request/response and domain models across src/app/models
 
+# External HTTP calls (OIDC discovery, PDF download)
 requests
 
 # For auth
 PyJWT==2.10.1
 cryptography>=41
 
-# For MongoDB
-pymongo
+# For MongoDB / BSON ObjectIds
+pymongo # src/app/models/** and tests/** import ObjectId via bson from pymongo
 
-# For tools
+# For keyword extraction tools
 yake # keyword
+
+# For LLM interaction tools
 litellm # llm interaction
 
-PyMuPDF # PDF reference finder
+# For embedding + vector DB integration
+openai # OpenAI embeddings client
+weaviate-client # Weaviate vector database client
+torch # CPU build for local BAAI/bge-m3 inference
+transformers<5 # FlagEmbedding 1.3.x is not compatible with transformers 5.x
+FlagEmbedding # local BAAI/bge-m3 vectorizer
+
+# For PDF text lookup / bounding-box finder
+PyMuPDF # needed by src/app/services/knowledge/guideline/bounding_box_finder_service.py and tests/app/services/knowledge/guideline/test_bounding_box_finder_service.py

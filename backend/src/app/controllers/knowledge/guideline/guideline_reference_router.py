@@ -5,14 +5,37 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from app.constants.auth_config import ROLE_ADMIN, ROLE_USER
 from app.controllers.dependencies.auth_dependencies import require_roles
 from app.exceptions.knowledge.guideline import (
+    ChunkingUpdateSourceEmptyError,
     GuidelineNotFoundError,
+    GuidelineReferenceChunkingError,
     GuidelineReferenceGroupNotFoundError,
+    InvalidChunkingConfigurationError,
+    NarrativeReferenceNotFoundError,
     TextInGuidelineNotFoundError,
 )
-from app.models.knowledge.guideline import BoundingBox, GuidelineEntry, GuidelineReference, GuidelineReferenceGroup, ReferenceType
+from app.models.knowledge.guideline import (
+    BoundingBox,
+    GuidelineEntry,
+    GuidelineReference,
+    GuidelineReferenceChunkingRequest,
+    GuidelineReferenceChunkingResult,
+    GuidelineReferenceChunkingUpdateRequest,
+    GuidelineReferenceGroup,
+    ReferenceType,
+)
 from app.models.knowledge.guideline.bounding_box_finder_api import BoundingBoxFinderRequest
-from app.services.knowledge.guideline import BoundingBoxFinderService, GuidelineReferenceService, GuidelineService
-from app.services.service_registry import get_bounding_box_finder_service, get_guideline_reference_service, get_guideline_service
+from app.services.knowledge.guideline import (
+    BoundingBoxFinderService,
+    GuidelineReferenceChunkingService,
+    GuidelineReferenceService,
+    GuidelineService,
+)
+from app.services.service_registry import (
+    get_bounding_box_finder_service,
+    get_guideline_reference_chunking_service,
+    get_guideline_reference_service,
+    get_guideline_service,
+)
 
 guideline_reference_router = APIRouter()
 
@@ -109,6 +132,67 @@ def delete_reference_group(
         return None
     except GuidelineNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@guideline_reference_router.post(
+    "/chunking",
+    response_model=GuidelineReferenceChunkingResult,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a chunked copy of a reference group (admin only)",
+    description=(
+        "Copies all references from a source reference group into a new target group. "
+        "Only references of type 'text' are chunked; all other references are copied unchanged. "
+        "Document hierarchy order is recalculated so later sibling references are shifted when a text reference expands into multiple chunks."
+    ),
+    dependencies=[Depends(require_roles(ROLE_ADMIN))],
+)
+def create_chunked_reference_group(
+        request: GuidelineReferenceChunkingRequest,
+        service: GuidelineReferenceChunkingService = Depends(get_guideline_reference_chunking_service),
+) -> GuidelineReferenceChunkingResult:
+    try:
+        return service.create_chunked_reference_group(request)
+    except (
+        GuidelineNotFoundError,
+        GuidelineReferenceGroupNotFoundError,
+        ChunkingUpdateSourceEmptyError,
+        NarrativeReferenceNotFoundError,
+    ) as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except (GuidelineReferenceChunkingError, InvalidChunkingConfigurationError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@guideline_reference_router.put(
+    "/chunking/guideline",
+    response_model=GuidelineReferenceChunkingResult,
+    status_code=status.HTTP_200_OK,
+    summary="Replace one guideline inside an existing chunk result group (admin only)",
+    description=(
+        "Deletes all references for the selected guideline from the target chunk result group and repopulates them "
+        "from another source reference group, applying the requested text chunking strategy during insertion."
+    ),
+    dependencies=[Depends(require_roles(ROLE_ADMIN))],
+)
+def update_chunked_guideline(
+        request: GuidelineReferenceChunkingUpdateRequest,
+        service: GuidelineReferenceChunkingService = Depends(get_guideline_reference_chunking_service),
+) -> GuidelineReferenceChunkingResult:
+    try:
+        return service.update_chunked_guideline(request)
+    except (
+        GuidelineNotFoundError,
+        GuidelineReferenceGroupNotFoundError,
+        ChunkingUpdateSourceEmptyError,
+        NarrativeReferenceNotFoundError,
+    ) as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except (GuidelineReferenceChunkingError, InvalidChunkingConfigurationError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================

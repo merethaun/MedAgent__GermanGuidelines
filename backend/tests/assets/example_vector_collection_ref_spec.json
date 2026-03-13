@@ -1,0 +1,100 @@
+{
+  "name": "OpenSource_StructuredGuidelineFixedCharacters500_RefSpec",
+  "reference_group_id": "TODO",
+  "description": "Reference-type specific collection for the reference group 'structured_guideline_fixed_characters_500', augmented with guideline structure (headings), using BAAI/bge-m3 embeddings and manhattan distance.",
+  "properties": [
+	{
+	  "name": "text",
+	  "data_type": "text",
+	  "description": "Mapped reference content"
+	},
+	{
+	  "name": "chunk_index",
+	  "data_type": "int",
+	  "description": "Insertion order inside this collection"
+	},
+	{
+	  "name": "guideline_id",
+	  "data_type": "text",
+	  "description": "MongoDB guideline ID"
+	},
+	{
+	  "name": "reference_id",
+	  "data_type": "text",
+	  "description": "MongoDB reference ID"
+	},
+	{
+	  "name": "reference_type",
+	  "data_type": "text",
+	  "description": "Type of reference (text, table, metadata, recommendation, ...)"
+	},
+	{
+	  "name": "headers",
+	  "data_type": "text",
+	  "description": "Joined hierarchy path from the reference"
+	},
+	{
+	  "name": "guideline_title",
+	  "data_type": "text",
+	  "description": "AWMF register number plus guideline title"
+	},
+	{
+	  "name": "guideline_keywords",
+	  "data_type": "text",
+	  "description": "Joined guideline-level keywords, goal, target patients, and care area"
+	},
+	{
+	  "name": "reference_keywords",
+	  "data_type": "text",
+	  "description": "Joined reference-level keywords"
+	}
+  ],
+  "named_vectors": [
+	{
+	  "name": "text",
+	  "source_property": "text",
+	  "provider": "baai-bge-m3",
+	  "distance_metric": "manhattan",
+	  "description": "Main embedding over chunk text"
+	},
+	{
+	  "name": "headers",
+	  "source_property": "headers",
+	  "provider": "baai-bge-m3",
+	  "distance_metric": "manhattan",
+	  "description": "Embedding over guideline heading structure"
+	}
+  ],
+  "ingestion_mapping": {
+	"content_property": "text",
+	"mapped_properties": {
+	  "reference_type": "reference_type",
+	  "headers": "headers",
+	  "guideline_title": "guideline_title",
+	  "guideline_keywords": "guideline_keywords",
+	  "reference_keywords": "reference_keywords"
+	},
+	"metadata_content_mode": "skip_heading_metadata",
+	"skip_references_without_content": true
+  },
+  "_related_ingest_reference_group_request_example": {
+    "guideline_id": "OPTIONAL_GUIDELINE_ID_FOR_SINGLE_GUIDELINE_REPLACE",
+    "provider_settings": [
+      {
+        "provider": "baai-bge-m3",
+        "model_name": "BAAI/bge-m3",
+        "batch_size": 8
+      }
+    ],
+    "continue_on_error": false
+  },
+  "_related_guideline_replace_request_example": {
+    "provider_settings": [
+      {
+        "provider": "baai-bge-m3",
+        "model_name": "BAAI/bge-m3",
+        "batch_size": 8
+      }
+    ]
+  }
+}

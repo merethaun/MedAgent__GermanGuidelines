@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # noinspection PyUnusedImports
 import app.services.system.components.component_registry
 # Other local imports
-from app.controllers import auth_router, system_router, tool_router
+from app.controllers import auth_router, embedding_router, system_router, tool_router, weaviate_router
 from app.controllers.knowledge.guideline import guideline_reference_router, guideline_router
 from app.services.service_registry import init_services
 
@@ -39,6 +39,8 @@ main_app.include_router(auth_router, prefix="/auth", tags=["Auth"])
 # Knowledge setup
 main_app.include_router(guideline_router, prefix="/guidelines", tags=["Guidelines"])
 main_app.include_router(guideline_reference_router, prefix="/guideline_references", tags=["GuidelineReferences"])
+main_app.include_router(embedding_router, prefix="/vector/embeddings", tags=["VectorEmbeddings"])
+main_app.include_router(weaviate_router, prefix="/vector/weaviate", tags=["WeaviateVectorStore"])
 
 # Tool testing
 main_app.include_router(tool_router, prefix="/tools", tags=["Tools"])

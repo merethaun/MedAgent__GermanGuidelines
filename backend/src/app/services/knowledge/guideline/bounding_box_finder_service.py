@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import List, Optional, Tuple
 
 import fitz  # PyMuPDF
@@ -12,6 +13,7 @@ from app.models.knowledge.guideline import BoundingBox, GuidelineEntry
 class BoundingBoxFinderService:
     """Service for finding bounding boxes in a guideline document."""
 
+    TOKEN_PATTERN = re.compile(r"\w+", re.UNICODE)
     MIN_BOX_WIDTH = 5.0
     MIN_BOX_AREA = 80.0
     THIN_TALL_BOX_MAX_WIDTH = 10.0
@@ -21,11 +23,137 @@ class BoundingBoxFinderService:
     VERTICAL_MERGE_GAP = 4.0
     COLUMN_X_TOLERANCE = 2.0
     BLOCK_X_OVERLAP_TOLERANCE = 2.0
+    MIN_FALLBACK_TOKEN_COUNT = 3
+    MAX_TOKEN_GAP = 250
+    MAX_TOTAL_SKIPPED_TOKENS = 500
+    MAX_JOINED_SOURCE_TOKENS = 3
     
     @staticmethod
     def _normalize_text(text: str) -> str:
         """Normalize text slightly to improve matching robustness."""
-        return " ".join(text.split()).strip()
+        return " ".join(text.replace("\u00ad", "").split()).strip()
+
+    @classmethod
+    def _tokenize_text(cls, text: str) -> List[str]:
+        return [match.group(0).casefold() for match in cls.TOKEN_PATTERN.finditer(cls._normalize_text(text))]
+
+    @classmethod
+    def _extract_page_tokens(
+            cls,
+            page: fitz.Page,
+            page_number: int,
+    ) -> List[Tuple[int, Tuple[float, float, float, float], str]]:
+        page_tokens: List[Tuple[int, Tuple[float, float, float, float], str]] = []
+
+        for x0, y0, x1, y1, text, *_ in page.get_text("words", sort=True):
+            for token in cls._tokenize_text(text):
+                page_tokens.append((page_number, (x0, y0, x1, y1), token))
+
+        return page_tokens
+
+    @classmethod
+    def _consume_query_token(
+            cls,
+            source_tokens: List[Tuple[int, Tuple[float, float, float, float], str]],
+            start_index: int,
+            query_token: str,
+    ) -> Optional[List[int]]:
+        if start_index >= len(source_tokens):
+            return None
+
+        consumed_indices = [start_index]
+        combined_token = source_tokens[start_index][2]
+
+        if combined_token == query_token:
+            return consumed_indices
+
+        if not query_token.startswith(combined_token):
+            return None
+
+        for next_index in range(start_index + 1, min(len(source_tokens), start_index + cls.MAX_JOINED_SOURCE_TOKENS)):
+            combined_token += source_tokens[next_index][2]
+            consumed_indices.append(next_index)
+
+            if combined_token == query_token:
+                return consumed_indices
+
+            if not query_token.startswith(combined_token):
+                return None
+
+        return None
+
+    @classmethod
+    def _match_query_from_start(
+            cls,
+            source_tokens: List[Tuple[int, Tuple[float, float, float, float], str]],
+            query_tokens: List[str],
+            start_index: int,
+    ) -> Optional[List[int]]:
+        matched_indices = cls._consume_query_token(source_tokens, start_index, query_tokens[0])
+        if not matched_indices:
+            return None
+
+        next_source_index = matched_indices[-1] + 1
+        total_skipped_tokens = 0
+
+        for query_token in query_tokens[1:]:
+            matched_query_token = False
+            scan_limit = min(len(source_tokens), next_source_index + cls.MAX_TOKEN_GAP + 1)
+
+            for candidate_index in range(next_source_index, scan_limit):
+                skipped_tokens = candidate_index - next_source_index
+                if total_skipped_tokens + skipped_tokens > cls.MAX_TOTAL_SKIPPED_TOKENS:
+                    break
+
+                consumed_indices = cls._consume_query_token(source_tokens, candidate_index, query_token)
+                if not consumed_indices:
+                    continue
+
+                matched_indices.extend(consumed_indices)
+                total_skipped_tokens += skipped_tokens
+                next_source_index = consumed_indices[-1] + 1
+                matched_query_token = True
+                break
+
+            if not matched_query_token:
+                return None
+
+        return matched_indices
+
+    @classmethod
+    def _find_matching_token_rects(
+            cls,
+            doc: fitz.Document,
+            start_idx: int,
+            end_idx: int,
+            query_tokens: List[str],
+    ) -> List[Tuple[int, Tuple[float, float, float, float]]]:
+        source_tokens: List[Tuple[int, Tuple[float, float, float, float], str]] = []
+
+        for page_index in range(start_idx, end_idx + 1):
+            source_tokens.extend(cls._extract_page_tokens(doc[page_index], page_index + 1))
+
+        matched_rects: List[Tuple[int, Tuple[float, float, float, float]]] = []
+        token_index = 0
+
+        while token_index < len(source_tokens):
+            matched_indices = cls._match_query_from_start(source_tokens, query_tokens, token_index)
+            if not matched_indices:
+                token_index += 1
+                continue
+
+            seen_rects = set()
+            for matched_index in matched_indices:
+                page_number, rect, _ = source_tokens[matched_index]
+                rect_key = (page_number, *rect)
+                if rect_key in seen_rects:
+                    continue
+                seen_rects.add(rect_key)
+                matched_rects.append((page_number, rect))
+
+            token_index = matched_indices[-1] + 1
+
+        return matched_rects
     
     @staticmethod
     def _get_pdf_path(guideline: GuidelineEntry) -> Path:
@@ -141,6 +269,30 @@ class BoundingBoxFinderService:
             max(first[2], second[2]),
             max(first[3], second[3]),
         )
+
+    @classmethod
+    def _build_bounding_boxes_from_rects(
+            cls,
+            page_rects: List[Tuple[int, Tuple[float, float, float, float]]],
+    ) -> List[BoundingBox]:
+        bboxs: List[BoundingBox] = []
+        current_page: Optional[int] = None
+        current_rects: List[Tuple[float, float, float, float]] = []
+
+        for page_number, rect in sorted(page_rects, key=lambda item: (item[0], item[1][1], item[1][0])):
+            if current_page is not None and page_number != current_page:
+                for merged_rect in cls._merge_positions(current_rects):
+                    bboxs.append(BoundingBox(page=current_page, positions=merged_rect))
+                current_rects = []
+
+            current_page = page_number
+            current_rects.append(rect)
+
+        if current_page is not None:
+            for merged_rect in cls._merge_positions(current_rects):
+                bboxs.append(BoundingBox(page=current_page, positions=merged_rect))
+
+        return bboxs
     
     def get_page_text(self, guideline: GuidelineEntry, page: int) -> str:
         """Return the full text of a specific PDF page.
@@ -216,7 +368,13 @@ class BoundingBoxFinderService:
                             positions=merged_rect,
                         ),
                     )
-        
+
+            if not bboxs:
+                query_tokens = self._tokenize_text(text)
+                if len(query_tokens) >= self.MIN_FALLBACK_TOKEN_COUNT:
+                    matched_rects = self._find_matching_token_rects(doc, start_idx, end_idx, query_tokens)
+                    bboxs.extend(self._build_bounding_boxes_from_rects(matched_rects))
+
         if not bboxs:
             raise TextInGuidelineNotFoundError(f"Could not find text in guideline '{guideline.id}': {text!r}")
         

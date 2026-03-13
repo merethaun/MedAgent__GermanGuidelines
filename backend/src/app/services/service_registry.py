@@ -5,11 +5,13 @@ from app.constants.mongodb_config import (
     GUIDELINE_COLLECTION,
     GUIDELINE_REFERENCE_COLLECTION,
     GUIDELINE_REFERENCE_GROUP_COLLECTION,
+    VECTOR_COLLECTION_COLLECTION,
     WORKFLOW_SYSTEM_COLLECTION,
 )
 from app.utils.mongo_collection_setup import get_collection, init_mongo
 from .auth import AuthService, TokenService
-from .knowledge.guideline import BoundingBoxFinderService, GuidelineReferenceService, GuidelineService
+from .knowledge.guideline import BoundingBoxFinderService, GuidelineReferenceChunkingService, GuidelineReferenceService, GuidelineService
+from .knowledge.vector import EmbeddingService, WeaviateVectorStoreService
 from .system import WorkflowSystemInteractionService, WorkflowSystemStorageService
 from .system.chat import ChatService
 from .tools import KeywordService, LLMInteractionService
@@ -20,6 +22,9 @@ _token_service: Optional[TokenService] = TokenService()
 _bounding_box_finder_service: Optional[BoundingBoxFinderService] = None
 _guideline_service: Optional[GuidelineService] = None
 _guideline_reference_service: Optional[GuidelineReferenceService] = None
+_guideline_reference_chunking_service: Optional[GuidelineReferenceChunkingService] = None
+_embedding_service: Optional[EmbeddingService] = None
+_weaviate_vector_store_service: Optional[WeaviateVectorStoreService] = None
 
 _keyword_service: Optional[KeywordService] = None
 _llm_interaction_service: Optional[LLMInteractionService] = None
@@ -57,6 +62,27 @@ def init_services() -> None:
             guideline_collection=get_collection(GUIDELINE_COLLECTION),
             reference_groups_collection=get_collection(GUIDELINE_REFERENCE_GROUP_COLLECTION),
             reference_collection=get_collection(GUIDELINE_REFERENCE_COLLECTION),
+        )
+
+    global _guideline_reference_chunking_service
+    if _guideline_reference_chunking_service is None:
+        _guideline_reference_chunking_service = GuidelineReferenceChunkingService(
+            reference_service=_guideline_reference_service,
+            guideline_service=_guideline_service,
+            bounding_box_finder_service=_bounding_box_finder_service,
+        )
+
+    global _embedding_service
+    if _embedding_service is None:
+        _embedding_service = EmbeddingService()
+
+    global _weaviate_vector_store_service
+    if _weaviate_vector_store_service is None:
+        _weaviate_vector_store_service = WeaviateVectorStoreService(
+            metadata_collection=get_collection(VECTOR_COLLECTION_COLLECTION),
+            embedding_service=_embedding_service,
+            guideline_service=_guideline_service,
+            guideline_reference_service=_guideline_reference_service,
         )
     
     global _keyword_service
@@ -121,12 +147,36 @@ def get_guideline_reference_service() -> GuidelineReferenceService:
     return _guideline_reference_service
 
 
+def get_guideline_reference_chunking_service() -> GuidelineReferenceChunkingService:
+    global _guideline_reference_chunking_service
+    if _guideline_reference_chunking_service is None:
+        init_services()
+    assert _guideline_reference_chunking_service is not None
+    return _guideline_reference_chunking_service
+
+
 def get_keyword_service() -> KeywordService:
     global _keyword_service
     if _keyword_service is None:
         init_services()
     assert _keyword_service is not None
     return _keyword_service
+
+
+def get_embedding_service() -> EmbeddingService:
+    global _embedding_service
+    if _embedding_service is None:
+        init_services()
+    assert _embedding_service is not None
+    return _embedding_service
+
+
+def get_weaviate_vector_store_service() -> WeaviateVectorStoreService:
+    global _weaviate_vector_store_service
+    if _weaviate_vector_store_service is None:
+        init_services()
+    assert _weaviate_vector_store_service is not None
+    return _weaviate_vector_store_service
 
 
 def get_llm_interaction_service() -> LLMInteractionService:
