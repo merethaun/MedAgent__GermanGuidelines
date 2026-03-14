@@ -175,6 +175,7 @@ Create a workflow by posting a JSON object to POST `<backend>/system/workflow` t
 - [Generator-only workflow](./tests/assets/example_gen_workflow.json) (! need to configure LLM settings)
 - [Vector retrieval + generator workflow](./tests/assets/example_vector_retriever_workflow.json) (! need to configure LLM settings and ensure the Weaviate collection exists)
 - [Multi-query vector retrieval + generator workflow](./tests/assets/example_multi_queries_vector_retriever_workflow.json) (! need to configure LLM settings and ensure the Weaviate collection exists)
+- [Multi-query vector retrieval + prompt-store generator workflow](./tests/assets/example_multi_queries_vector_retriever_prompt_store_workflow.json) (! need to configure LLM settings and ensure the Weaviate collection exists)
 
 ### Retriever component notes
 
@@ -202,6 +203,110 @@ Minimal settings shape:
   "source_id_property": "guideline_id"
 }
 ```
+
+### Prompt store workflow example
+
+Stored prompts now use typed prompt definitions with:
+
+- `system_prompt`: the reusable instruction block
+- `prompt`: an example prompt or default prompt template stored alongside the system prompt
+
+The recommended pattern is to keep the reusable instruction in the prompt store and define the actual execution prompt directly in the generator component. That keeps the retrieval-to-prompt mapping adjustable per workflow.
+
+Example:
+
+```json
+{
+  "name": "Multi Query Vector Retrieval + Prompt Store Generator",
+  "nodes": [
+    {
+      "component_id": "start",
+      "name": "Start node",
+      "type": "start",
+      "parameters": {}
+    },
+    {
+      "component_id": "retriever",
+      "name": "Guideline multi-query vector retriever",
+      "type": "retriever/multi_queries_vector_retriever",
+      "parameters": {
+        "settings": {
+          "weaviate_collection": "OpenSource_StructuredGuidelineFixedCharacters500_RefSpec",
+          "limit": 5,
+          "per_query_limit": 8,
+          "queries": [
+            {
+              "query": "{start.current_user_input}",
+              "vector_name": "text",
+              "weight": 1.0,
+              "mode": "vector"
+            },
+            {
+              "query": "{start.current_user_input}",
+              "vector_name": "headers",
+              "weight": 0.4,
+              "mode": "vector"
+            },
+            {
+              "mode": "hybrid",
+              "keyword_properties": [
+                "text",
+                "headers"
+              ],
+              "alpha": 0.2
+            }
+          ],
+          "content_property": "text",
+          "reference_id_property": "reference_id",
+          "source_id_property": "guideline_id"
+        }
+      }
+    },
+    {
+      "component_id": "generator",
+      "name": "OpenAI Generator",
+      "type": "generator",
+      "parameters": {
+        "prompt_key": "awmf_clinical_qa_html_v1",
+        "prompt": "{\ncontexts = []\nfor i, ref in enumerate(retriever.references):\n    properties = ref.weaviate_properties or {}\n    section = properties.get('headers', '')\n    text = properties.get('text') or ref.retrieval or ''\n    contexts.append(f'''<context_item id=\"{i}\" section=\"{section}\">\\n{text}\\n</context_item>''')\nreturn f'''<context>{chr(10).join(contexts)}</context>\\n<question>{start.current_user_input}</question>'''\n}",
+        "llm_settings": {
+          "model": "gpt-4o-mini",
+          "api_key": "TODO",
+          "base_url": "https://api.openai.com/v1",
+          "max_tokens": 512,
+          "timeout_s": 60
+        }
+      }
+    },
+    {
+      "component_id": "end",
+      "name": "End node",
+      "type": "end",
+      "parameters": {
+        "generation_key": "{generator.response}",
+        "retrieval_key": "{retriever.references}",
+        "retrieval_latency_key": "{retriever.latency}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "start",
+      "target": "retriever"
+    },
+    {
+      "source": "retriever",
+      "target": "generator"
+    },
+    {
+      "source": "generator",
+      "target": "end"
+    }
+  ]
+}
+```
+
+Here, `prompt_key` contributes the reusable AWMF system prompt, while `prompt` is defined in the workflow and can map whatever retrieval structure that workflow exposes.
 
 `retriever/multi_queries_vector_retriever` expects:
 

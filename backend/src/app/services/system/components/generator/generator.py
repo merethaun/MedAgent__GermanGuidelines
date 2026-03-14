@@ -3,9 +3,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from app.exceptions.tools import LLMChatSessionNotFoundError
+from app.models.system import PromptDefinition
 from app.models.system.system_chat_interaction import WorkflowComponentExecutionResult
 from app.models.tools.llm_interaction import LLMSettings, Message
 from app.services.system.components import AbstractComponent
+from app.services.system.prompt_store import get_prompt_definition
 from app.utils.logging import setup_logger
 from app.utils.system.render_template import render_template
 
@@ -31,16 +33,16 @@ def _coerce_llm_settings(raw: Any) -> LLMSettings:
     return LLMSettings.model_validate(raw)
 
 
-def _render_llm_settings(raw: Any, data: Dict[str, Any]) -> Any:
+def _render_value(raw: Any, data: Dict[str, Any]) -> Any:
     """
-    Render templated string values inside llm_settings (optional convenience).
+    Render templated string values inside nested structures.
     """
     if isinstance(raw, str):
         return render_template(raw, data)
     if isinstance(raw, dict):
-        return {k: _render_llm_settings(v, data) for k, v in raw.items()}
+        return {k: _render_value(v, data) for k, v in raw.items()}
     if isinstance(raw, list):
-        return [_render_llm_settings(v, data) for v in raw]
+        return [_render_value(v, data) for v in raw]
     return raw
 
 
@@ -57,7 +59,9 @@ class LLMGenerator(AbstractComponent, variant_name="generator"):
     
     default_parameters: Dict[str, Any] = {
         "prompt": "{start.current_user_input}",
+        "prompt_key": None,
         "system_prompt": None,
+        "system_prompt_key": None,
         
         # Settings:
         "llm_settings": None,
@@ -99,9 +103,17 @@ class LLMGenerator(AbstractComponent, variant_name="generator"):
                 "type": "string",
                 "description": "Prompt template resolved against workflow data.",
             },
+            "prompt_key": {
+                "type": "string",
+                "description": "Lookup key for a shared prompt template stored in the prompt registry.",
+            },
             "system_prompt": {
                 "type": "string",
                 "description": "Optional system prompt (only used on session creation).",
+            },
+            "system_prompt_key": {
+                "type": "string",
+                "description": "Lookup key for a shared system prompt template stored in the prompt registry.",
             },
             "llm_settings": {
                 "type": "object",
@@ -157,13 +169,34 @@ class LLMGenerator(AbstractComponent, variant_name="generator"):
     # -------------------------
     # Resolution helpers
     # -------------------------
+    def _resolve_prompt_definition(self) -> Optional[PromptDefinition]:
+        prompt_key = self.parameters.get("prompt_key", self.default_parameters.get("prompt_key"))
+        system_prompt_key = self.parameters.get("system_prompt_key", self.default_parameters.get("system_prompt_key"))
+
+        if prompt_key and system_prompt_key and prompt_key != system_prompt_key:
+            raise ValueError("prompt_key and system_prompt_key must match when both are provided")
+
+        key = prompt_key or system_prompt_key
+        if not key:
+            return None
+        return get_prompt_definition(key)
+
+    def _resolve_prompt_template(self, *, template_param: str, definition: Optional[PromptDefinition]) -> Any:
+        if template_param in self.parameters and self.parameters[template_param] is not None:
+            return self.parameters[template_param]
+
+        if definition is not None:
+            return getattr(definition, template_param)
+
+        return self.parameters.get(template_param, self.default_parameters[template_param])
+
     def _resolve_llm_settings(self, data: Dict[str, Any]) -> LLMSettings:
         raw = self.parameters.get("llm_settings", self.default_parameters["llm_settings"])
         if raw is None:
             raise ValueError("No llm_settings provided. Set parameters.llm_settings.")
-        raw = _render_llm_settings(raw, data)
+        raw = _render_value(raw, data)
         return _coerce_llm_settings(raw)
-    
+
     def _resolve_session_id(self, data: Dict[str, Any]) -> str:
         key = self.parameters.get("session_id_key", self.default_parameters["session_id_key"])
         out_key = self.parameters.get("output_session_id_key", self.default_parameters["output_session_id_key"])
@@ -255,16 +288,18 @@ class LLMGenerator(AbstractComponent, variant_name="generator"):
     # Execution
     # -------------------------
     def execute(self, data: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
-        prompt_template = self.parameters.get("prompt", self.default_parameters["prompt"])
+        prompt_definition = self._resolve_prompt_definition()
+
+        prompt_template = self._resolve_prompt_template(template_param="prompt", definition=prompt_definition)
         prompt = render_template(prompt_template, data)
-        
-        if not prompt.strip():
+
+        if not isinstance(prompt, str) or not prompt.strip():
             raise ValueError("Resolved prompt must not be empty")
-        
+
         llm_settings = self._resolve_llm_settings(data)
         session_id = self._resolve_session_id(data)
         
-        system_prompt = self.parameters.get("system_prompt", self.default_parameters["system_prompt"])
+        system_prompt = self._resolve_prompt_template(template_param="system_prompt", definition=prompt_definition)
         if system_prompt:
             system_prompt = render_template(system_prompt, data)
         
