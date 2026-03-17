@@ -1,13 +1,13 @@
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.models.knowledge.guideline.guideline_reference import GuidelineReference, REFERENCE_TYPE_MAP
 from app.models.knowledge.vector import WeaviateSearchRequest
-from app.models.system.system_chat_interaction import RetrievalResult
 from app.models.system.workflow_retriever import (
     MultiQueryVectorRetrieverSettings,
     VectorRetrieverSettings,
 )
-from app.services.service_registry import get_weaviate_vector_store_service
+from app.services.service_registry import get_guideline_reference_service, get_weaviate_vector_store_service
 from app.services.system.components.retriever.abstract_retriever import AbstractRetriever
 from app.utils.logging import setup_logger
 from app.utils.system.render_template import render_template
@@ -25,30 +25,31 @@ def _render_value(value: Any, data: Dict[str, Any]) -> Any:
     return value
 
 
-def _map_hit_to_retrieval_result(
+def _deserialize_reference_payload(payload: Dict[str, Any]) -> GuidelineReference:
+    reference_type = payload.get("type")
+    model_cls = REFERENCE_TYPE_MAP.get(reference_type)
+    if model_cls is None:
+        raise ValueError(f"Unknown reference type in Weaviate payload: {reference_type}")
+    return model_cls.model_validate(payload)
+
+
+def _map_hit_to_reference(
         *,
         hit: Any,
-        content_property: str,
-        source_id_property: str,
+        contained_reference_property: Optional[str],
         reference_id_property: str,
-) -> Optional[RetrievalResult]:
+) -> Optional[GuidelineReference]:
     properties = hit.properties or {}
+    if contained_reference_property:
+        payload = properties.get(contained_reference_property)
+        if isinstance(payload, dict):
+            return _deserialize_reference_payload(payload)
+
     reference_id = properties.get(reference_id_property)
-    source_id = properties.get(source_id_property)
-    retrieval_text = properties.get(content_property)
-    
-    if reference_id is None and (source_id is None or retrieval_text is None):
+    if reference_id is None:
         return None
-    
-    return RetrievalResult(
-        reference_id=reference_id,
-        source_id=source_id,
-        retrieval=retrieval_text,
-        weaviate_uuid=getattr(hit, "uuid", None),
-        weaviate_score=getattr(hit, "score", None),
-        weaviate_distance=getattr(hit, "distance", None),
-        weaviate_properties=properties,
-    )
+
+    return get_guideline_reference_service().get_reference_by_id(reference_id)
 
 
 class VectorRetriever(AbstractRetriever, variant_name="vector_retriever"):
@@ -85,7 +86,7 @@ class VectorRetriever(AbstractRetriever, variant_name="vector_retriever"):
         rendered = _render_value(raw_settings, data)
         return VectorRetrieverSettings.model_validate(rendered)
     
-    def retrieve(self, query: str, data: Dict[str, Any]) -> Tuple[List[RetrievalResult], float]:
+    def retrieve(self, query: str, data: Dict[str, Any]) -> Tuple[List[GuidelineReference], float]:
         settings = self._resolve_settings(data)
         logger.debug(
             "VectorRetriever.retrieve: component_id=%s collection=%s vector=%s mode=%s limit=%s query_chars=%d",
@@ -111,26 +112,22 @@ class VectorRetriever(AbstractRetriever, variant_name="vector_retriever"):
         response = get_weaviate_vector_store_service().search(settings.weaviate_collection, request)
         latency = time.time() - started
         
-        references: List[RetrievalResult] = []
+        references: List[GuidelineReference] = []
         for hit in response.hits:
-            properties = hit.properties or {}
-            retrieval_result = _map_hit_to_retrieval_result(
+            reference = _map_hit_to_reference(
                 hit=hit,
-                content_property=settings.content_property,
-                source_id_property=settings.source_id_property,
+                contained_reference_property=settings.contained_reference_property,
                 reference_id_property=settings.reference_id_property,
             )
-            if retrieval_result is None:
+            if reference is None:
                 logger.debug(
-                    "Skipping Weaviate hit %s because it lacks '%s' and '%s'/'%s'.",
+                    "Skipping Weaviate hit %s because it lacks '%s' and no embedded reference payload was configured.",
                     hit.uuid,
                     settings.reference_id_property,
-                    settings.source_id_property,
-                    settings.content_property,
                 )
                 continue
-            
-            references.append(retrieval_result)
+
+            references.append(reference)
         
         logger.info(
             "VectorRetriever succeeded: component_id=%s collection=%s vector=%s mode=%s returned=%d",
@@ -158,7 +155,7 @@ class MultiQueriesVectorRetriever(AbstractRetriever, variant_name="multi_queries
         return {
             "retriever.references": {
                 "type": "array",
-                "description": "Merged RetrievalResult list from all configured queries.",
+                "description": "Merged GuidelineReference list from all configured queries.",
             },
             "retriever.latency": {
                 "type": "float",
@@ -185,12 +182,12 @@ class MultiQueriesVectorRetriever(AbstractRetriever, variant_name="multi_queries
         return MultiQueryVectorRetrieverSettings.model_validate(rendered)
     
     @staticmethod
-    def _dedupe_key(result: RetrievalResult) -> str:
-        if result.reference_id is not None:
-            return f"reference:{result.reference_id}"
-        return f"source:{result.source_id}|text:{result.retrieval}"
-    
-    def retrieve(self, query: str, data: Dict[str, Any]) -> Tuple[List[RetrievalResult], float]:
+    def _dedupe_key(result: GuidelineReference) -> str:
+        if getattr(result, "id", None) is not None:
+            return f"reference:{result.id}"
+        return f"guideline:{result.guideline_id}|type:{result.type.value}|text:{result.extract_content()}"
+
+    def retrieve(self, query: str, data: Dict[str, Any]) -> Tuple[List[GuidelineReference], float]:
         raise NotImplementedError("MultiQueriesVectorRetriever uses execute() to handle multiple queries.")
     
     def execute(self, data: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
@@ -244,10 +241,9 @@ class MultiQueriesVectorRetriever(AbstractRetriever, variant_name="multi_queries
                 response = service.search(settings.weaviate_collection, request)
                 
                 for rank, hit in enumerate(response.hits, start=1):
-                    result = _map_hit_to_retrieval_result(
+                    result = _map_hit_to_reference(
                         hit=hit,
-                        content_property=settings.content_property,
-                        source_id_property=settings.source_id_property,
+                        contained_reference_property=settings.contained_reference_property,
                         reference_id_property=settings.reference_id_property,
                     )
                     if result is None:

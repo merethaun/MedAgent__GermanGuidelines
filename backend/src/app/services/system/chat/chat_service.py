@@ -7,13 +7,15 @@ from typing import Any, List, Optional, Union
 from bson import ObjectId
 from pymongo.collection import Collection
 from pymongo.results import DeleteResult, InsertOneResult, UpdateResult
+from pydantic import TypeAdapter
 
 from app.exceptions.system.chat import ChatNotFoundError
-from app.models.system.system_chat_interaction import Chat, ChatInteraction, RetrievalResult
+from app.models.system.system_chat_interaction import Chat, ChatInteraction, RetrievedWorkflowItem
 from app.services.system.workflow_system_interaction_service import WorkflowSystemInteractionService
 from app.utils.logging import setup_logger
 
 logger = setup_logger(__name__)
+_RETRIEVAL_OUTPUT_ADAPTER = TypeAdapter(List[RetrievedWorkflowItem])
 
 
 @dataclass
@@ -212,11 +214,7 @@ class ChatService:
         last = chat.interactions[-1]
         last.generator_output = self._normalize_generator_output(generator_output)
         
-        last.retrieval_output = (
-            [RetrievalResult(**r) if isinstance(r, dict) else r for r in retrieval_output]
-            if retrieval_output
-            else []
-        )
+        last.retrieval_output = _RETRIEVAL_OUTPUT_ADAPTER.validate_python(retrieval_output or [])
         
         last.time_response_output = datetime.now(timezone.utc)
         last.retrieval_latency = retrieval_latency

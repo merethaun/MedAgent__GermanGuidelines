@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from bson import ObjectId
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.common.py_object_id import PyObjectId
+from app.models.knowledge.guideline.guideline_reference import GuidelineReference
 
 
 class RetrievalResult(BaseModel):
@@ -31,6 +32,9 @@ class RetrievalResult(BaseModel):
         populate_by_name=True,
         json_encoders={ObjectId: str},
     )
+
+
+RetrievedWorkflowItem = Union[RetrievalResult, GuidelineReference]
 
 
 def sanitize(obj):
@@ -72,7 +76,7 @@ class ChatInteraction(BaseModel):
     time_question_input: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     generator_output: Optional[str] = Field(default=None)
     time_response_output: Optional[datetime] = Field(default=None)
-    retrieval_output: List[RetrievalResult] = Field(default_factory=list)
+    retrieval_output: List[RetrievedWorkflowItem] = Field(default_factory=list)
     retrieval_latency: Optional[float] = Field(default=None)
     
     workflow_execution: List[WorkflowComponentExecutionResult] = Field(default_factory=list)

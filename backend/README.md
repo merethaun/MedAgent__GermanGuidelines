@@ -165,6 +165,8 @@ The currently available component variants are:
 | `start`                                    | [`StartComponent`](./src/app/services/system/components/structure/start_component.py)                             | Required as start to provide user input                                                                                                                                                                                                   |
 | `end`                                      | [`EndComponent`](./src/app/services/system/components/structure/end_component.py)                                 | Required as end to define generator output (text) and retrieval result (references)                                                                                                                                                       |
 | `generator`                                | [`LLMGenerator`](./src/app/services/system/components/generator/generator.py)                                     | Executes the actual text generation step by sending a resolved prompt to the configured LLM and returning the model response. The LLM is configured via [`LLMSettings`](./src/app/models/tools/llm_interaction.py).                       |
+| `filter/deduplicate_references`            | [`DeduplicateReferencesFilter`](./src/app/services/system/components/filter/guideline_context_filter.py)          | Deduplicates a list of guideline references based on configured properties such as `content` and `heading_path`.                                                                                                                         |
+| `filter/relevance_filter_references`       | [`RelevanceFilterReferences`](./src/app/services/system/components/filter/guideline_context_filter.py)            | Relevance-based filtering for guideline references. It can use numeric fields, a cross-encoder, or an LLM judge, and can combine multiple properties into one filter input.                                                            |
 | `query_transformer/query_context_merger`   | [`QueryContextMergerTransformer`](./src/app/services/system/components/query_transformer/query_context_merger.py) | Builds one standalone query from the current user input plus the last `x` chat turns. It only considers prior user inputs and final generator outputs, so it works as a lightweight workflow-level context provider without tool routing. |
 | `query_transformer/rewrite`                | [`QueryRewriteTransformer`](./src/app/services/system/components/query_transformer/query_rewriter.py)             | LLM-based query rewriting. Use `rewrite_instructions` to define the rewrite behavior, for example a clean-query rewrite that only fixes misspellings and spacing.                                                                         |
 | `query_transformer/keyword_extractor`      | [`KeywordQueryTransformer`](./src/app/services/system/components/query_transformer/keyword_transformer.py)        | Extracts query keywords with either `yake` or `llm`, and can optionally expand them with SNOMED synonyms.                                                                                                                                 |
@@ -198,6 +200,10 @@ Create a workflow by posting a JSON object to POST `<backend>/system/workflow` t
   after a context-merging step, without synonyms, and HyDE)
 - [Vector retrieval + generator workflow](./tests/assets/example_vector_retriever_workflow.json) (! need to configure LLM settings and ensure the
   Weaviate collection exists)
+- [Vector retrieval + guideline context filter + generator workflow](./tests/assets/example_guideline_context_filter_workflow.json) (! need to configure LLM
+  settings and ensure the Weaviate collection exists)
+- [Vector retrieval + deduplicate + cross-encoder relevance + LLM relevance + generator workflow](./tests/assets/example_guideline_context_filter_all_in_one_workflow.json) (! need to configure LLM
+  settings and ensure the Weaviate collection exists)
 - [Multi-query vector retrieval + generator workflow](./tests/assets/example_multi_queries_vector_retriever_workflow.json) (! need to configure LLM
   settings and ensure the Weaviate collection exists)
 - [Multi-query vector retrieval + prompt-store generator workflow](./tests/assets/example_multi_queries_vector_retriever_prompt_store_workflow.json) (!
@@ -229,6 +235,90 @@ Minimal settings shape:
   "source_id_property": "guideline_id"
 }
 ```
+
+### Guideline context filter notes
+
+Both filter components expect:
+
+- `references_key`: workflow key or template resolving to the retrieved references
+- `filter_input`: query, response, or other text used for the keep/drop decision
+- `settings`: object validated by [`GuidelineContextFilterSettings`](./src/app/models/tools/guideline_context_filter.py)
+
+This component works on lists of `GuidelineReference` objects, not on `RetrievalResult`. That means it can also filter references that did not come from
+Weaviate or any retriever component.
+
+The service exposes two explicit operations, and the workflow system now mirrors them as two separate component variants:
+
+- `deduplicate_references(...)`
+- `relevance_filter_references(...)`
+
+Filtering behavior:
+
+- `kind = "deduplicate"` removes duplicate retrieved context items based on the configured properties
+- `kind = "relevance"` applies one of the relevance methods below
+- `method = "score"` reuses an existing numeric field such as `weaviate_score`
+- `method = "cross_encoder"` scores each retrieved item against the filter input
+- `method = "llm"` asks an LLM to decide which items to keep
+- `minimum_score` can be used as a threshold on the calculated relevance score before `keep_top_k` is applied
+- `keep_top_k` is optional, so the same component can just reorder, just filter, or do both
+
+To avoid a component explosion, the item input is defined through `settings.properties`. Each entry selects one property, for example `retrieval`,
+`content`, `heading_path`, or any dotted path inside the reference model. These selected properties are merged into one per-item string before
+cross-encoder or LLM judging.
+
+Minimal settings shape:
+
+```json
+{
+  "kind": "relevance",
+  "method": "cross_encoder",
+  "minimum_score": 0.5,
+  "keep_top_k": 4,
+  "properties": [
+    {
+      "path": "content",
+      "label": "text"
+    },
+    {
+      "path": "heading_path",
+      "label": "section"
+    }
+  ]
+}
+```
+
+Minimal deduplication shape:
+
+```json
+{
+  "kind": "deduplicate",
+  "properties": [
+    {
+      "path": "content"
+    },
+    {
+      "path": "heading_path"
+    }
+  ],
+  "deduplicate_keep_strategy": "highest_score",
+  "score_field": "document_hierarchy.0.order"
+}
+```
+
+There is also a standalone tool endpoint:
+
+- `POST /tools/guideline-context-filter`
+
+It accepts guideline references directly, so the same filtering logic can be used without going through the workflow system.
+
+If you want one workflow that exercises both filter variants in sequence, use
+[example_guideline_context_filter_all_in_one_workflow.json](./tests/assets/example_guideline_context_filter_all_in_one_workflow.json).
+It runs:
+
+- `filter/deduplicate_references`
+- `filter/relevance_filter_references` with `method = "cross_encoder"`
+- `filter/relevance_filter_references` with `method = "llm"`
+- `generator`
 
 ### Prompt store workflow example
 

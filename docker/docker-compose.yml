@@ -50,8 +50,7 @@ services:
       GUIDELINE_PDF_FOLDER: /data/guidelines/pdfs
       # Vector DB + HuggingFace
       BGE_M3_MODEL_NAME: BAAI/bge-m3
-      HF_HOME: /models/huggingface
-      TRANSFORMERS_CACHE: /models/huggingface/transformers
+      HF_HOME: /models/huggingface/transformers
       WEAVIATE_URL: http://weaviate:8080
       WEAVIATE_GRPC_URL: http://weaviate:50051
       # SNOMED CT setting

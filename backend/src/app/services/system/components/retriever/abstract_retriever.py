@@ -1,7 +1,8 @@
 from abc import abstractmethod
 from typing import Any, Dict, List, Optional, Tuple, Type
 
-from app.models.system.system_chat_interaction import RetrievalResult, WorkflowComponentExecutionResult
+from app.models.knowledge.guideline.guideline_reference import GuidelineReference
+from app.models.system.system_chat_interaction import WorkflowComponentExecutionResult
 from app.services.system.components import AbstractComponent
 from app.utils.logging import setup_logger
 from app.utils.system.render_template import render_template
@@ -44,12 +45,12 @@ class AbstractRetriever(AbstractComponent, variant_name="retriever"):
         return {
             "retriever.references": {
                 "type": "array",
-                "description": "List of RetrievalResult objects returned by the retriever.",
+                "description": "List of GuidelineReference objects returned by the retriever.",
             },
         }
-    
+
     @abstractmethod
-    def retrieve(self, query: str, data: Dict[str, Any]) -> Tuple[List[RetrievalResult], float]:
+    def retrieve(self, query: str, data: Dict[str, Any]) -> Tuple[List[GuidelineReference], float]:
         pass
     
     def execute(self, data: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:

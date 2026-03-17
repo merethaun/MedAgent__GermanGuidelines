@@ -47,6 +47,10 @@ class VectorRetrieverSettings(BaseModel):
         default=WEAVIATE_PROP_REFERENCE_ID,
         description="Hit property mapped to RetrievalResult.reference_id when present.",
     )
+    contained_reference_property: Optional[str] = Field(
+        default=None,
+        description="Optional hit property containing the full serialized GuidelineReference payload.",
+    )
 
 
 class MultiQueryVectorQuery(BaseModel):
@@ -106,4 +110,8 @@ class MultiQueryVectorRetrieverSettings(BaseModel):
     reference_id_property: str = Field(
         default=WEAVIATE_PROP_REFERENCE_ID,
         description="Hit property mapped to RetrievalResult.reference_id when present.",
+    )
+    contained_reference_property: Optional[str] = Field(
+        default=None,
+        description="Optional hit property containing the full serialized GuidelineReference payload.",
     )

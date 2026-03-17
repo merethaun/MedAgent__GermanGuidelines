@@ -4,7 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from app.models.system.system_chat_interaction import Chat, RetrievalResult, WorkflowComponentExecutionResult
+from app.models.system.system_chat_interaction import Chat, RetrievedWorkflowItem, WorkflowComponentExecutionResult
 from app.models.system.workflow_system import WorkflowConfig
 from app.services.system.components.abstract_component import ComponentContext
 from app.services.system.workflow_system_storage_service import WorkflowSystemStorageService
@@ -27,7 +27,7 @@ class WorkflowSystemInteractionService:
             self,
             wf_id: str,
             chat: Chat,
-    ) -> Tuple[str, List[RetrievalResult], float, float, List[WorkflowComponentExecutionResult]]:
+    ) -> Tuple[str, List[RetrievedWorkflowItem], float, float, List[WorkflowComponentExecutionResult]]:
         wf = self.storage.get_workflow_by_id(wf_id)
         runtime = WorkflowRuntime(
             wf_id=wf_id,
@@ -86,7 +86,7 @@ class WorkflowRuntime:
     def run(
             self,
             chat: Chat,
-    ) -> Tuple[str, List[RetrievalResult], float, float, List[WorkflowComponentExecutionResult]]:
+    ) -> Tuple[str, List[RetrievedWorkflowItem], float, float, List[WorkflowComponentExecutionResult]]:
         current = self.start_node
         data: Dict[str, Any] = {"chat": chat}
         

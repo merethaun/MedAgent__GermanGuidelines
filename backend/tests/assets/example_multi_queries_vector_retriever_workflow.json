@@ -57,7 +57,7 @@
 		  "max_tokens": 512,
 		  "timeout_s": 60
 		},
-		"prompt": "{\nretrieval_results = [\n    {\n        'heading_path': ref.weaviate_properties.get('headers'),\n        'content': ref.weaviate_properties.get('text') or ref.retrieval\n  }\n    for ref in retriever.references\n]\nreturn f'''Question: {start.current_user_input}\n\nRetrieved references:\n{retrieval_results}'''\n}"
+		"prompt": "{\nretrieval_results = [\n    {\n        'heading_path': ' / '.join([entry.title for entry in (ref.document_hierarchy or []) if entry.title]),\n        'content': ref.extract_content()\n    }\n    for ref in retriever.references\n]\nreturn f'''Question: {start.current_user_input}\n\nRetrieved references:\n{retrieval_results}'''\n}"
 	  }
 	},
 	{

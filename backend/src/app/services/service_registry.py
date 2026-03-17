@@ -20,7 +20,7 @@ from .knowledge.guideline import (
 from .knowledge.vector import EmbeddingService, WeaviateVectorStoreService
 from .system import WorkflowSystemInteractionService, WorkflowSystemStorageService
 from .system.chat import ChatService
-from .tools import KeywordService, LLMInteractionService, QueryTransformationService, SnomedService
+from .tools import GuidelineContextFilterService, KeywordService, LLMInteractionService, QueryTransformationService, SnomedService
 
 _auth_service: Optional[AuthService] = None
 _token_service: Optional[TokenService] = TokenService()
@@ -36,6 +36,7 @@ _weaviate_vector_store_service: Optional[WeaviateVectorStoreService] = None
 _keyword_service: Optional[KeywordService] = None
 _snomed_service: Optional[SnomedService] = None
 _llm_interaction_service: Optional[LLMInteractionService] = None
+_guideline_context_filter_service: Optional[GuidelineContextFilterService] = None
 
 _workflow_storage_service: Optional[WorkflowSystemStorageService] = None
 _workflow_interaction_service: Optional[WorkflowSystemInteractionService] = None
@@ -101,7 +102,11 @@ def init_services() -> None:
     global _keyword_service
     if _keyword_service is None:
         _keyword_service = KeywordService(_llm_interaction_service)
-    
+
+    global _guideline_context_filter_service
+    if _guideline_context_filter_service is None:
+        _guideline_context_filter_service = GuidelineContextFilterService(_llm_interaction_service)
+
     global _snomed_service
     if _snomed_service is None:
         _snomed_service = SnomedService(_llm_interaction_service)
@@ -226,6 +231,14 @@ def get_llm_interaction_service() -> LLMInteractionService:
         init_services()
     assert _llm_interaction_service is not None
     return _llm_interaction_service
+
+
+def get_guideline_context_filter_service() -> GuidelineContextFilterService:
+    global _guideline_context_filter_service
+    if _guideline_context_filter_service is None:
+        init_services()
+    assert _guideline_context_filter_service is not None
+    return _guideline_context_filter_service
 
 
 def get_workflow_storage_service() -> WorkflowSystemStorageService:

@@ -50,7 +50,7 @@
 	  "type": "generator",
 	  "parameters": {
 		"prompt_key": "awmf_clinical_qa_html_v1",
-		"prompt": "{\ncontexts = []\nfor i, ref in enumerate(retriever.references):\n    properties = ref.weaviate_properties or {}\n    section = properties.get('headers', '')\n    text = properties.get('text') or ref.retrieval or ''\n    contexts.append(f'''<context_item id=\"{i}\" section=\"{section}\">\\n{text}\\n</context_item>''')\nreturn f'''<context>{chr(10).join(contexts)}</context>\\n<question>{start.current_user_input}</question>'''\n}",
+		"prompt": "{\ncontexts = []\nfor i, ref in enumerate(retriever.references):\n    section = ' / '.join([entry.title for entry in (ref.document_hierarchy or []) if entry.title])\n    text = ref.extract_content() or ''\n    contexts.append(f'''<context_item id=\"{i}\" section=\"{section}\">\\n{text}\\n</context_item>''')\nreturn f'''<context>{chr(10).join(contexts)}</context>\\n<question>{start.current_user_input}</question>'''\n}",
 		"llm_settings": {
 		  "model": "gpt-4o-mini",
 		  "api_key": "TODO",

@@ -37,7 +37,7 @@
 		  "max_tokens": 512,
 		  "timeout_s": 60
 		},
-		"prompt": "Question: {start.current_user_input}\n\nRetrieved references:\n{retriever.references}"
+		"prompt": "{\ncontexts = []\nfor i, ref in enumerate(retriever.references):\n    section = ' / '.join([entry.title for entry in (ref.document_hierarchy or []) if entry.title])\n    contexts.append({\n        'id': i,\n        'heading_path': section,\n        'content': ref.extract_content()\n    })\nreturn f'''Question: {start.current_user_input}\n\nRetrieved references:\n{contexts}'''\n}"
 	  }
 	},
 	{

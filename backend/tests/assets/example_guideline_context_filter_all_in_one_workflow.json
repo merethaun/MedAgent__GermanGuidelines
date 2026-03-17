@@ -1,0 +1,169 @@
+{
+  "name": "Vector Retrieval + Deduplicate + Cross-Encoder Relevance + LLM Relevance + Generator",
+  "nodes": [
+    {
+      "component_id": "start",
+      "name": "Start node",
+      "type": "start",
+      "parameters": {}
+    },
+    {
+      "component_id": "retriever",
+      "name": "Guideline vector retriever",
+      "type": "retriever/vector_retriever",
+      "parameters": {
+        "query": "{start.current_user_input}",
+        "settings": {
+          "weaviate_collection": "OpenSource_StructuredGuidelineFixedCharacters500_RefSpec",
+          "vector_name": "text",
+          "limit": 10,
+          "mode": "vector"
+        }
+      }
+    },
+    {
+      "component_id": "deduplicate",
+      "name": "Deduplicate references",
+      "type": "filter/deduplicate_references",
+      "parameters": {
+        "references_key": "retriever.references",
+        "filter_input": "{start.current_user_input}",
+        "settings": {
+          "kind": "deduplicate",
+          "score_field": "document_hierarchy.0.order",
+          "deduplicate_keep_strategy": "highest_score",
+          "properties": [
+            {
+              "path": "content",
+              "label": "text",
+              "include_label": false
+            },
+            {
+              "path": "heading_path",
+              "label": "section",
+              "include_label": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "component_id": "relevance",
+      "name": "Cross-encoder relevance filter",
+      "type": "filter/relevance_filter_references",
+      "parameters": {
+        "references_key": "deduplicate.references",
+        "filter_input": "{start.current_user_input}",
+        "settings": {
+          "kind": "relevance",
+          "method": "cross_encoder",
+          "minimum_score": 0.4,
+          "keep_top_k": 6,
+          "cross_encoder_model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+          "properties": [
+            {
+              "path": "content",
+              "label": "text"
+            },
+            {
+              "path": "heading_path",
+              "label": "section"
+            },
+            {
+              "path": "type",
+              "label": "reference_type"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "component_id": "llm_relevance",
+      "name": "LLM relevance filter",
+      "type": "filter/relevance_filter_references",
+      "parameters": {
+        "references_key": "relevance.references",
+        "filter_input": "{start.current_user_input}",
+        "settings": {
+          "kind": "relevance",
+          "method": "llm",
+          "minimum_score": 0.65,
+          "keep_top_k": 4,
+          "llm_settings": {
+            "model": "gpt-4o-mini",
+            "api_key": "TODO",
+            "base_url": "https://api.openai.com/v1",
+            "max_tokens": 256,
+            "timeout_s": 60
+          },
+          "properties": [
+            {
+              "path": "content",
+              "label": "text"
+            },
+            {
+              "path": "heading_path",
+              "label": "section"
+            },
+            {
+              "path": "type",
+              "label": "reference_type"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "component_id": "generator",
+      "name": "OpenAI Generator",
+      "type": "generator",
+      "parameters": {
+        "prompt_key": "awmf_clinical_qa_html_v1",
+        "prompt": "{\ncontexts = []\nfor i, ref in enumerate(llm_relevance.references):\n    section = ' / '.join([entry.title for entry in (ref.document_hierarchy or []) if entry.title])\n    text = ref.extract_content() or ''\n    contexts.append(f'''<context_item id=\"{i}\" section=\"{section}\" type=\"{ref.type}\">\\n{text}\\n</context_item>''')\nreturn f'''<context>{chr(10).join(contexts)}</context>\\n<question>{start.current_user_input}</question>'''\n}",
+        "llm_settings": {
+          "model": "gpt-4o-mini",
+          "api_key": "TODO",
+          "base_url": "https://api.openai.com/v1",
+          "max_tokens": 512,
+          "timeout_s": 60
+        }
+      }
+    },
+    {
+      "component_id": "end",
+      "name": "End node",
+      "type": "end",
+      "parameters": {
+        "generation_key": "{generator.response}",
+        "retrieval_key": "{llm_relevance.references}",
+        "retrieval_latency_key": "{retriever.latency + deduplicate.latency + relevance.latency + llm_relevance.latency}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "start",
+      "target": "retriever"
+    },
+    {
+      "source": "retriever",
+      "target": "deduplicate"
+    },
+    {
+      "source": "deduplicate",
+      "target": "relevance"
+    },
+    {
+      "source": "relevance",
+      "target": "llm_relevance"
+    },
+    {
+      "source": "llm_relevance",
+      "target": "generator"
+    },
+    {
+      "source": "generator",
+      "target": "end"
+    }
+  ]
+}
