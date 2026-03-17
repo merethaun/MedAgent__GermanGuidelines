@@ -25,7 +25,7 @@ from app.services.knowledge.guideline import GuidelineReferenceChunkingService, 
 class InMemoryCollection:
     def __init__(self, documents=None):
         self.documents = [copy.deepcopy(document) for document in (documents or [])]
-
+    
     def find_one(self, query, projection=None, sort=None):
         docs = self.find(query, projection=None)
         if sort:
@@ -34,18 +34,18 @@ class InMemoryCollection:
         if not docs:
             return None
         return self._apply_projection(copy.deepcopy(docs[0]), projection)
-
+    
     def find(self, query=None, projection=None):
         query = query or {}
         results = [copy.deepcopy(document) for document in self.documents if self._matches(document, query)]
         return [self._apply_projection(document, projection) for document in results]
-
+    
     def insert_one(self, payload):
         document = copy.deepcopy(payload)
         document.setdefault("_id", ObjectId())
         self.documents.append(document)
         return SimpleNamespace(inserted_id=document["_id"])
-
+    
     def update_one(self, query, update):
         matched_count = 0
         for document in self.documents:
@@ -54,7 +54,7 @@ class InMemoryCollection:
                 document.update(copy.deepcopy(update.get("$set", {})))
                 break
         return SimpleNamespace(matched_count=matched_count)
-
+    
     def delete_one(self, query):
         deleted_count = 0
         for index, document in enumerate(self.documents):
@@ -63,7 +63,7 @@ class InMemoryCollection:
                 deleted_count = 1
                 break
         return SimpleNamespace(deleted_count=deleted_count)
-
+    
     def delete_many(self, query):
         remaining_documents = []
         deleted_count = 0
@@ -74,7 +74,7 @@ class InMemoryCollection:
                 remaining_documents.append(document)
         self.documents = remaining_documents
         return SimpleNamespace(deleted_count=deleted_count)
-
+    
     @staticmethod
     def _apply_projection(document, projection):
         if not projection:
@@ -86,7 +86,7 @@ class InMemoryCollection:
         if "_id" in document and ("_id" in include_fields or "_id" not in projection):
             projected["_id"] = document["_id"]
         return projected
-
+    
     @staticmethod
     def _matches(document, query):
         for key, value in query.items():
@@ -102,7 +102,7 @@ class InMemoryCollection:
 class FakeGuidelineService:
     def __init__(self, guidelines):
         self.guidelines = {str(guideline.id): guideline for guideline in guidelines}
-
+    
     def get_guideline_by_id(self, guideline_id):
         return self.guidelines[str(guideline_id)]
 
@@ -110,7 +110,7 @@ class FakeGuidelineService:
 class FakeBoundingBoxFinderService:
     def __init__(self):
         self.calls = []
-
+    
     def text_to_bounding_boxes(self, guideline, text, start_page=None, end_page=None):
         self.calls.append(
             {
@@ -130,7 +130,7 @@ class GuidelineReferenceChunkingServiceTest(unittest.TestCase):
         self.source_group_id = ObjectId()
         self.second_source_group_id = ObjectId()
         self.target_group_id = ObjectId()
-
+        
         self.reference_groups_collection = InMemoryCollection(
             [
                 {"_id": self.source_group_id, "name": "source_group"},
@@ -155,7 +155,10 @@ class GuidelineReferenceChunkingServiceTest(unittest.TestCase):
                     metadata_content="12.2",
                 ),
                 self._reference(self.source_group_id, self.guideline_id, ReferenceType.TEXT.value, 1, contained_text="abcdefghij"),
-                self._reference(self.source_group_id, self.guideline_id, ReferenceType.TABLE.value, 2, caption="Tabelle 3", plain_text="row", table_markdown="|a|"),
+                self._reference(
+                    self.source_group_id, self.guideline_id, ReferenceType.TABLE.value, 2, caption="Tabelle 3", plain_text="row",
+                    table_markdown="|a|",
+                ),
                 self._reference(
                     self.second_source_group_id,
                     self.guideline_id,
@@ -188,7 +191,7 @@ class GuidelineReferenceChunkingServiceTest(unittest.TestCase):
                 ),
             ],
         )
-
+        
         self.reference_service = GuidelineReferenceService(
             guideline_collection=self.guideline_collection,
             reference_groups_collection=self.reference_groups_collection,
@@ -206,7 +209,7 @@ class GuidelineReferenceChunkingServiceTest(unittest.TestCase):
             guideline_service=self.fake_guideline_service,
             bounding_box_finder_service=self.fake_bounding_box_finder_service,
         )
-
+    
     def test_create_chunked_reference_group_reindexes_following_siblings(self):
         result = self.chunking_service.create_chunked_reference_group(
             GuidelineReferenceChunkingRequest(
@@ -215,21 +218,25 @@ class GuidelineReferenceChunkingServiceTest(unittest.TestCase):
                 fixed_character_amount=5,
             ),
         )
-
+        
         created_references = self.reference_service.list_references(reference_group_id=result.target_reference_group_id)
-        created_references = sorted(created_references, key=lambda reference: tuple(
-            entry.order for entry in reference.document_hierarchy
-        ))
+        created_references = sorted(
+            created_references, key=lambda reference: tuple(
+                entry.order for entry in reference.document_hierarchy,
+            ),
+        )
         created_group = self.reference_service.get_reference_group_by_id(result.target_reference_group_id)
         self.assertEqual(result.chunked_text_reference_count, 1)
         self.assertEqual(result.created_reference_count, 4)
         self.assertTrue(created_group.is_chunking_result)
-        self.assertEqual([reference.type for reference in created_references], [
-            ReferenceType.METADATA,
-            ReferenceType.TEXT,
-            ReferenceType.TEXT,
-            ReferenceType.TABLE,
-        ])
+        self.assertEqual(
+            [reference.type for reference in created_references], [
+                ReferenceType.METADATA,
+                ReferenceType.TEXT,
+                ReferenceType.TEXT,
+                ReferenceType.TABLE,
+            ],
+        )
         self.assertEqual(
             [reference.document_hierarchy[-1].order for reference in created_references],
             [0, 1, 2, 3],
@@ -243,7 +250,7 @@ class GuidelineReferenceChunkingServiceTest(unittest.TestCase):
             ["abcde", "fghij"],
         )
         self.assertTrue(all(call["start_page"] == 33 and call["end_page"] == 33 for call in self.fake_bounding_box_finder_service.calls))
-
+    
     def test_sentence_chunking_splits_each_sentence(self):
         result = self.chunking_service.create_chunked_reference_group(
             GuidelineReferenceChunkingRequest(
@@ -251,11 +258,13 @@ class GuidelineReferenceChunkingServiceTest(unittest.TestCase):
                 chunking_strategy=ChunkingStrategy.SENTENCE,
             ),
         )
-
+        
         created_references = self.reference_service.list_references(reference_group_id=result.target_reference_group_id)
-        created_references = sorted(created_references, key=lambda reference: tuple(
-            entry.order for entry in reference.document_hierarchy
-        ))
+        created_references = sorted(
+            created_references, key=lambda reference: tuple(
+                entry.order for entry in reference.document_hierarchy,
+            ),
+        )
         created_texts = [reference.contained_text for reference in created_references if reference.type == ReferenceType.TEXT]
         self.assertEqual(
             created_texts,
@@ -269,16 +278,16 @@ class GuidelineReferenceChunkingServiceTest(unittest.TestCase):
             [call["text"] for call in self.fake_bounding_box_finder_service.calls],
             ["Erster Satz.", "Zweiter Satz.", "Dritter Satz."],
         )
-
+    
     def test_fixed_character_chunking_does_not_cut_last_word(self):
         chunks = self.chunking_service._split_text_reference(
             "Alpha Beta Gamma",
             strategy=ChunkingStrategy.FIXED_CHARACTERS,
             fixed_character_amount=12,
         )
-
+        
         self.assertEqual(chunks, ["Alpha Beta", "Gamma"])
-
+    
     def test_update_chunked_guideline_replaces_only_selected_guideline(self):
         result = self.chunking_service.update_chunked_guideline(
             GuidelineReferenceChunkingUpdateRequest(
@@ -288,18 +297,20 @@ class GuidelineReferenceChunkingServiceTest(unittest.TestCase):
                 chunking_strategy=ChunkingStrategy.SENTENCE,
             ),
         )
-
+        
         target_references = self.reference_service.list_references(reference_group_id=self.target_group_id)
         updated_guideline_references = [
             reference for reference in target_references if reference.guideline_id == self.guideline_id
         ]
-        updated_guideline_references = sorted(updated_guideline_references, key=lambda reference: tuple(
-            entry.order for entry in reference.document_hierarchy
-        ))
+        updated_guideline_references = sorted(
+            updated_guideline_references, key=lambda reference: tuple(
+                entry.order for entry in reference.document_hierarchy,
+            ),
+        )
         untouched_guideline_references = [
             reference for reference in target_references if reference.guideline_id == self.other_guideline_id
         ]
-
+        
         self.assertEqual(len(result.deleted_reference_ids), 1)
         self.assertEqual(
             [reference.contained_text for reference in updated_guideline_references if reference.type == ReferenceType.TEXT],
@@ -315,7 +326,7 @@ class GuidelineReferenceChunkingServiceTest(unittest.TestCase):
             [call["text"] for call in self.fake_bounding_box_finder_service.calls],
             ["Erster Satz.", "Zweiter Satz.", "Dritter Satz."],
         )
-
+    
     @staticmethod
     def _reference(reference_group_id, guideline_id, reference_type, order, **content_fields):
         payload = {
@@ -334,7 +345,7 @@ class GuidelineReferenceChunkingServiceTest(unittest.TestCase):
         }
         payload.update(content_fields)
         return payload
-
+    
     @staticmethod
     def _guideline(guideline_id, register_number):
         return GuidelineEntry(

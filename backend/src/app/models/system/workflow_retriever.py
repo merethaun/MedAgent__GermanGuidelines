@@ -12,7 +12,7 @@ from app.models.knowledge.vector import EmbeddingProviderSettings, WeaviateSearc
 
 class VectorRetrieverSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     weaviate_collection: str = Field(..., description="Weaviate collection used for search.")
     vector_name: str = Field(default=WEAVIATE_PROP_TEXT, description="Named vector to search against.")
     limit: int = Field(default=5, ge=1, le=100, description="Maximum number of references to return.")
@@ -51,7 +51,7 @@ class VectorRetrieverSettings(BaseModel):
 
 class MultiQueryVectorQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     query: str = Field(..., description="Query template resolved against workflow data.")
     vector_name: str = Field(default=WEAVIATE_PROP_TEXT, description="Named vector used for this query.")
     weight: float = Field(default=1.0, gt=0.0, description="Relative contribution of this query to the merged ranking.")
@@ -73,7 +73,7 @@ class MultiQueryVectorQuery(BaseModel):
 
 class MultiQueryVectorRetrieverSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     weaviate_collection: str = Field(..., description="Weaviate collection used for search.")
     queries: List[MultiQueryVectorQuery] = Field(
         ...,

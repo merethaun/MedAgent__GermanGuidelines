@@ -142,6 +142,34 @@ class LLMInteractionService:
         session.updated_at = datetime.now(timezone.utc)
         return answer
     
+    def generate_text(
+            self,
+            *,
+            llm_settings: LLMSettings,
+            prompt: str,
+            system_prompt: Optional[str] = None,
+            session_id: Optional[str] = None,
+    ) -> str:
+        """
+        Unified non-streaming entrypoint for all LLM-backed service calls.
+
+        If `session_id` is provided, the call is routed through a managed chat session.
+        Otherwise this performs a stateless one-off call.
+        """
+        if session_id:
+            try:
+                self.update_session_settings(session_id, llm_settings)
+            except LLMChatSessionNotFoundError:
+                self.create_session(
+                    llm_settings=llm_settings,
+                    session_id=session_id,
+                    system_prompt=system_prompt,
+                )
+            return self.chat_text(session_id=session_id, prompt=prompt)
+        
+        client = LLMClient(llm_settings)
+        return client.chat_text(prompt, system_prompt=system_prompt)
+    
     def chat_stream_text(self, session_id: str, prompt: str):
         """
         Streaming variant: yields chunks and stores the final assistant message.

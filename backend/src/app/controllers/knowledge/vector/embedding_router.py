@@ -30,8 +30,8 @@ def list_embedding_providers(service: EmbeddingService = Depends(get_embedding_s
     status_code=status.HTTP_200_OK,
     summary="Embed one or more texts (admin only)",
     description=(
-        "Embeds the provided texts with the selected provider. "
-        "This is useful for quick diagnostics, retrieval experiments, and vector-db ingestion."
+            "Embeds the provided texts with the selected provider. "
+            "This is useful for quick diagnostics, retrieval experiments, and vector-db ingestion."
     ),
     dependencies=[Depends(require_roles(ROLE_ADMIN))],
 )

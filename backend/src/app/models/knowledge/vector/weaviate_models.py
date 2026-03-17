@@ -47,17 +47,17 @@ class MetadataContentMode(str, Enum):
 
 class WeaviateCollectionProperty(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     name: str = Field(..., description="Property name stored in the Weaviate object.")
     data_type: str = Field(..., description="Weaviate data type, for example 'text', 'int', or 'number'.")
     description: Optional[str] = Field(default=None, description="Short property description for schema docs.")
-
+    
     @field_validator("data_type", mode="before")
     @classmethod
     def _normalize_and_validate_data_type(cls, value: str) -> str:
         if not isinstance(value, str):
             raise ValueError("data_type must be a string")
-
+        
         normalized = value.strip().lower()
         if normalized not in SUPPORTED_WEAVIATE_PROPERTY_DATA_TYPES:
             raise ValueError(
@@ -69,7 +69,7 @@ class WeaviateCollectionProperty(BaseModel):
 
 class WeaviateNamedVector(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     name: str = Field(..., description="Weaviate named vector name.")
     source_property: str = Field(..., description="Property whose text content is embedded for this vector.")
     provider: str = Field(..., description="Registered embedding provider used to produce this named vector.")
@@ -79,7 +79,7 @@ class WeaviateNamedVector(BaseModel):
 
 class VectorCollectionIngestionMapping(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     content_property: str = Field(
         default="text",
         description="Collection property that receives the extracted reference content.",
@@ -148,7 +148,7 @@ class CreateWeaviateCollectionRequest(BaseModel):
             },
         },
     )
-
+    
     name: str = Field(..., description="Collection name. Must start with an uppercase letter in Weaviate.")
     reference_group_id: PyObjectId = Field(
         ...,
@@ -161,7 +161,7 @@ class CreateWeaviateCollectionRequest(BaseModel):
         default=VectorCollectionIngestionMapping(),
         description="Mapping used when ingesting all references from the linked reference group into this collection.",
     )
-
+    
     @model_validator(mode="after")
     def _validate_named_vectors(self) -> "CreateWeaviateCollectionRequest":
         property_names = {entry.name for entry in self.properties}
@@ -188,13 +188,13 @@ class WeaviateCollectionResponse(CreateWeaviateCollectionRequest):
 
 class WeaviateUpsertObjectRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     properties: Dict[str, Any] = Field(..., description="Object payload stored in Weaviate.")
     provider_settings: List[EmbeddingProviderSettings] = Field(
         default=[],
         description="Request-scoped embedding provider configuration used to build named vectors.",
     )
-
+    
     @field_validator("properties")
     @classmethod
     def _ensure_properties(cls, properties: Dict[str, Any]) -> Dict[str, Any]:
@@ -205,14 +205,14 @@ class WeaviateUpsertObjectRequest(BaseModel):
 
 class WeaviateObjectResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     uuid: str
     properties: Dict[str, Any]
 
 
 class WeaviateSearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     query: str = Field(..., description="Text query that will be embedded before search.")
     vector_name: str = Field(..., description="Named vector to search against.")
     provider_settings: List[EmbeddingProviderSettings] = Field(
@@ -235,7 +235,7 @@ class WeaviateSearchRequest(BaseModel):
         default=None,
         description="Drop hits below this score when Weaviate returns scores.",
     )
-
+    
     @field_validator("query")
     @classmethod
     def _validate_query(cls, query: str) -> str:
@@ -246,7 +246,7 @@ class WeaviateSearchRequest(BaseModel):
 
 class WeaviateSearchHit(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     uuid: str
     score: Optional[float] = None
     distance: Optional[float] = None
@@ -255,7 +255,7 @@ class WeaviateSearchHit(BaseModel):
 
 class WeaviateSearchResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     collection_name: str
     vector_name: str
     mode: WeaviateSearchMode
@@ -279,7 +279,7 @@ class IngestReferenceGroupRequest(BaseModel):
             },
         },
     )
-
+    
     guideline_id: Optional[str] = Field(
         default=None,
         description="Optional guideline id. If provided, only that guideline is replaced in the collection; otherwise the full linked reference group is ingested.",
@@ -296,7 +296,7 @@ class IngestReferenceGroupRequest(BaseModel):
 
 class IngestReferenceGroupResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     collection_name: str
     reference_group_id: PyObjectId
     inserted_object_count: int
@@ -319,7 +319,7 @@ class IngestGuidelineRequest(BaseModel):
             },
         },
     )
-
+    
     provider_settings: List[EmbeddingProviderSettings] = Field(
         default=[],
         description="Request-scoped embedding provider configuration used while vectorizing this guideline's references.",
@@ -328,7 +328,7 @@ class IngestGuidelineRequest(BaseModel):
 
 class DeleteGuidelineResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     collection_name: str
     guideline_id: str
     deleted_object_count: int
@@ -336,6 +336,6 @@ class DeleteGuidelineResponse(BaseModel):
 
 class WeaviateCapabilitiesResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     distance_metrics: List[str]
     vectorizers: List[VectorizerDescriptor]

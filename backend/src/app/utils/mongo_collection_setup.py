@@ -5,7 +5,7 @@ from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
 
-from app.constants.mongodb_config import MONGODB_URI, MONGODB_DB_NAME
+from app.constants.mongodb_config import MONGODB_DB_NAME, MONGODB_URI
 
 
 @dataclass(frozen=True)

@@ -14,18 +14,9 @@ from app.exceptions.knowledge.guideline import (
     TextInGuidelineNotFoundError,
 )
 from app.models.knowledge.guideline import (
-    BoundingBox,
-    GuidelineEntry,
-    GuidelineReference,
-    GuidelineReferenceChunkingRequest,
-    GuidelineReferenceChunkingResult,
-    GuidelineReferenceChunkingUpdateRequest,
-    ReferenceGroupKeywordUpdateRequest,
-    ReferenceKeywordEnrichmentRequest,
-    ReferenceKeywordEnrichmentResult,
-    ReferenceKeywordUpdateRequest,
-    GuidelineReferenceGroup,
-    ReferenceType,
+    BoundingBox, GuidelineEntry, GuidelineReference, GuidelineReferenceChunkingRequest, GuidelineReferenceChunkingResult,
+    GuidelineReferenceChunkingUpdateRequest, GuidelineReferenceGroup, ReferenceGroupKeywordUpdateRequest, ReferenceKeywordEnrichmentRequest,
+    ReferenceKeywordEnrichmentResult, ReferenceKeywordUpdateRequest, ReferenceType,
 )
 from app.models.knowledge.guideline.bounding_box_finder_api import BoundingBoxFinderRequest
 from app.services.knowledge.guideline import (
@@ -146,9 +137,9 @@ def delete_reference_group(
     status_code=status.HTTP_201_CREATED,
     summary="Create a chunked copy of a reference group (admin only)",
     description=(
-        "Copies all references from a source reference group into a new target group. "
-        "Only references of type 'text' are chunked; all other references are copied unchanged. "
-        "Document hierarchy order is recalculated so later sibling references are shifted when a text reference expands into multiple chunks."
+            "Copies all references from a source reference group into a new target group. "
+            "Only references of type 'text' are chunked; all other references are copied unchanged. "
+            "Document hierarchy order is recalculated so later sibling references are shifted when a text reference expands into multiple chunks."
     ),
     dependencies=[Depends(require_roles(ROLE_ADMIN))],
 )
@@ -159,10 +150,10 @@ def create_chunked_reference_group(
     try:
         return service.create_chunked_reference_group(request)
     except (
-        GuidelineNotFoundError,
-        GuidelineReferenceGroupNotFoundError,
-        ChunkingUpdateSourceEmptyError,
-        NarrativeReferenceNotFoundError,
+            GuidelineNotFoundError,
+            GuidelineReferenceGroupNotFoundError,
+            ChunkingUpdateSourceEmptyError,
+            NarrativeReferenceNotFoundError,
     ) as e:
         raise HTTPException(status_code=404, detail=str(e))
     except (GuidelineReferenceChunkingError, InvalidChunkingConfigurationError) as e:
@@ -177,8 +168,8 @@ def create_chunked_reference_group(
     status_code=status.HTTP_200_OK,
     summary="Replace one guideline inside an existing chunk result group (admin only)",
     description=(
-        "Deletes all references for the selected guideline from the target chunk result group and repopulates them "
-        "from another source reference group, applying the requested text chunking strategy during insertion."
+            "Deletes all references for the selected guideline from the target chunk result group and repopulates them "
+            "from another source reference group, applying the requested text chunking strategy during insertion."
     ),
     dependencies=[Depends(require_roles(ROLE_ADMIN))],
 )
@@ -189,10 +180,10 @@ def update_chunked_guideline(
     try:
         return service.update_chunked_guideline(request)
     except (
-        GuidelineNotFoundError,
-        GuidelineReferenceGroupNotFoundError,
-        ChunkingUpdateSourceEmptyError,
-        NarrativeReferenceNotFoundError,
+            GuidelineNotFoundError,
+            GuidelineReferenceGroupNotFoundError,
+            ChunkingUpdateSourceEmptyError,
+            NarrativeReferenceNotFoundError,
     ) as e:
         raise HTTPException(status_code=404, detail=str(e))
     except (GuidelineReferenceChunkingError, InvalidChunkingConfigurationError) as e:
@@ -207,9 +198,9 @@ def update_chunked_guideline(
     status_code=status.HTTP_200_OK,
     summary="Extract and store keywords for a reference group (admin only)",
     description=(
-        "Writes extracted keywords back into `associated_keywords`. "
-        "Supports YAKE or LLM-based extraction and optional SNOMED synonym expansion. "
-        "You can optionally restrict processing to one guideline inside the selected group."
+            "Writes extracted keywords back into `associated_keywords`. "
+            "Supports YAKE or LLM-based extraction and optional SNOMED synonym expansion. "
+            "You can optionally restrict processing to one guideline inside the selected group."
     ),
     dependencies=[Depends(require_roles(ROLE_ADMIN))],
 )
@@ -411,8 +402,8 @@ def patch_reference(
     status_code=status.HTTP_200_OK,
     summary="Extract and store keywords for one reference (admin only)",
     description=(
-        "Writes extracted keywords back into `associated_keywords` for the selected reference. "
-        "Supports YAKE or LLM-based extraction and optional SNOMED synonym expansion."
+            "Writes extracted keywords back into `associated_keywords` for the selected reference. "
+            "Supports YAKE or LLM-based extraction and optional SNOMED synonym expansion."
     ),
     dependencies=[Depends(require_roles(ROLE_ADMIN))],
 )

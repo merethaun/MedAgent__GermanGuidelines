@@ -25,7 +25,7 @@ keyword_router = APIRouter()
 def get_keyword_defaults() -> Dict[str, Any]:
     try:
         from app.services.tools.keyword_service import DEFAULT_KEYWORD_SETTINGS, KEYWORDS_PROMPT  # noqa
-
+        
         return {
             "DEFAULT_KEYWORD_SETTINGS": DEFAULT_KEYWORD_SETTINGS,
             "KEYWORDS_PROMPT_preview": KEYWORDS_PROMPT[:500] + " ...",
@@ -49,7 +49,7 @@ def extract_keywords_yake(
 ) -> KeywordExtractionResponse:
     try:
         logger.info("Tools/Keywords YAKE: text_len=%d lang=%s", len(req.text), req.language)
-
+        
         keywords = service.extract_yake(
             text=req.text,
             language=req.language,
@@ -61,9 +61,9 @@ def extract_keywords_yake(
             suppress_subphrases=req.suppress_subphrases,
             headroom=req.headroom,
         )
-
+        
         return KeywordExtractionResponse(keywords=keywords)
-
+    
     except Exception as e:
         logger.error("YAKE keyword extraction failed: %s", str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -88,7 +88,7 @@ def extract_keywords_llm(
             getattr(req.llm_settings, "model", None),
             getattr(req.llm_settings, "base_url", None),
         )
-
+        
         keywords = service.extract_llm(
             req.text,
             llm_settings=req.llm_settings,
@@ -100,9 +100,9 @@ def extract_keywords_llm(
             min_keywords=req.min_keywords,
             max_keywords=req.max_keywords,
         )
-
+        
         return KeywordExtractionResponse(keywords=keywords)
-
+    
     except Exception as e:
         logger.error("LLM keyword extraction failed: %s", str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -126,26 +126,26 @@ def extract_keywords_both(
 ) -> KeywordBothResponse:
     try:
         logger.info("Tools/Keywords BOTH: text_len=%d lang=%s", len(text), language)
-
+        
         yake_kw = service.extract_yake(
             text=text,
             language=language,
             min_keywords=min_keywords,
             max_keywords=max_keywords,
         )
-
+        
         llm_kw = service.extract_llm(
             text,
             llm_settings=llm_settings,
             min_keywords=min_keywords,
             max_keywords=max_keywords,
         )
-
+        
         overlap = sorted(set(yake_kw).intersection(set(llm_kw)))
         union = sorted(set(yake_kw).union(set(llm_kw)))
-
+        
         return KeywordBothResponse(yake=yake_kw, llm=llm_kw, overlap=overlap, union=union)
-
+    
     except Exception as e:
         logger.error("BOTH keyword extraction failed: %s", str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

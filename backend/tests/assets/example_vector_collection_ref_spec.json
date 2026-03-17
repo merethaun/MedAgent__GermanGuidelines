@@ -78,23 +78,23 @@
 	"skip_references_without_content": true
   },
   "_related_ingest_reference_group_request_example": {
-    "guideline_id": "OPTIONAL_GUIDELINE_ID_FOR_SINGLE_GUIDELINE_REPLACE",
-    "provider_settings": [
-      {
-        "provider": "baai-bge-m3",
-        "model_name": "BAAI/bge-m3",
-        "batch_size": 8
-      }
-    ],
-    "continue_on_error": false
+	"guideline_id": "OPTIONAL_GUIDELINE_ID_FOR_SINGLE_GUIDELINE_REPLACE",
+	"provider_settings": [
+	  {
+		"provider": "baai-bge-m3",
+		"model_name": "BAAI/bge-m3",
+		"batch_size": 8
+	  }
+	],
+	"continue_on_error": false
   },
   "_related_guideline_replace_request_example": {
-    "provider_settings": [
-      {
-        "provider": "baai-bge-m3",
-        "model_name": "BAAI/bge-m3",
-        "batch_size": 8
-      }
-    ]
+	"provider_settings": [
+	  {
+		"provider": "baai-bge-m3",
+		"model_name": "BAAI/bge-m3",
+		"batch_size": 8
+	  }
+	]
   }
 }

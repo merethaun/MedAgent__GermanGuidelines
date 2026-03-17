@@ -37,7 +37,7 @@ class BGEM3Vectorizer(AbstractVectorizer):
     def _get_model(self, model_name: str):
         if model_name not in self._models:
             from FlagEmbedding import BGEM3FlagModel
-
+            
             logger.info("Loading local embedding model %s", model_name)
             self._models[model_name] = BGEM3FlagModel(model_name, use_fp16=False)
         return self._models[model_name]

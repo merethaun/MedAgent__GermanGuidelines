@@ -15,16 +15,16 @@ class EmbeddingService:
     The service deliberately hides provider-specific details from controllers so
     embedding endpoints can stay small and reusable.
     """
-
+    
     def __init__(self):
         self._vectorizers: Dict[str, AbstractVectorizer] = {
             OpenAITextEmbedding3LargeVectorizer.provider: OpenAITextEmbedding3LargeVectorizer(),
             BGEM3Vectorizer.provider: BGEM3Vectorizer(),
         }
-
+    
     def list_vectorizers(self) -> List[VectorizerDescriptor]:
         return [vectorizer.get_descriptor() for vectorizer in self._vectorizers.values()]
-
+    
     def embed_texts(
             self,
             provider: str,
@@ -39,14 +39,14 @@ class EmbeddingService:
         if normalize:
             return [self._normalize_vector(vector) for vector in embeddings]
         return embeddings
-
+    
     def get_vectorizer(self, provider: str) -> AbstractVectorizer:
         vectorizer = self._vectorizers.get(provider)
         if vectorizer is None:
             raise VectorizerNotFoundError(f"Unknown vectorizer provider: {provider}")
-
+        
         return vectorizer
-
+    
     def ensure_vectorizer_available(
             self,
             provider: str,
@@ -57,7 +57,7 @@ class EmbeddingService:
         if not is_available:
             raise VectorizerNotAvailableError(message or f"Vectorizer '{provider}' is not available.")
         return vectorizer
-
+    
     @staticmethod
     def _normalize_vector(vector: List[float]) -> List[float]:
         norm = math.sqrt(sum(component * component for component in vector))

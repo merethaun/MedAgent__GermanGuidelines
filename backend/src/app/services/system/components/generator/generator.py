@@ -172,31 +172,31 @@ class LLMGenerator(AbstractComponent, variant_name="generator"):
     def _resolve_prompt_definition(self) -> Optional[PromptDefinition]:
         prompt_key = self.parameters.get("prompt_key", self.default_parameters.get("prompt_key"))
         system_prompt_key = self.parameters.get("system_prompt_key", self.default_parameters.get("system_prompt_key"))
-
+        
         if prompt_key and system_prompt_key and prompt_key != system_prompt_key:
             raise ValueError("prompt_key and system_prompt_key must match when both are provided")
-
+        
         key = prompt_key or system_prompt_key
         if not key:
             return None
         return get_prompt_definition(key)
-
+    
     def _resolve_prompt_template(self, *, template_param: str, definition: Optional[PromptDefinition]) -> Any:
         if template_param in self.parameters and self.parameters[template_param] is not None:
             return self.parameters[template_param]
-
+        
         if definition is not None:
             return getattr(definition, template_param)
-
+        
         return self.parameters.get(template_param, self.default_parameters[template_param])
-
+    
     def _resolve_llm_settings(self, data: Dict[str, Any]) -> LLMSettings:
         raw = self.parameters.get("llm_settings", self.default_parameters["llm_settings"])
         if raw is None:
             raise ValueError("No llm_settings provided. Set parameters.llm_settings.")
         raw = _render_value(raw, data)
         return _coerce_llm_settings(raw)
-
+    
     def _resolve_session_id(self, data: Dict[str, Any]) -> str:
         key = self.parameters.get("session_id_key", self.default_parameters["session_id_key"])
         out_key = self.parameters.get("output_session_id_key", self.default_parameters["output_session_id_key"])
@@ -289,13 +289,13 @@ class LLMGenerator(AbstractComponent, variant_name="generator"):
     # -------------------------
     def execute(self, data: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
         prompt_definition = self._resolve_prompt_definition()
-
+        
         prompt_template = self._resolve_prompt_template(template_param="prompt", definition=prompt_definition)
         prompt = render_template(prompt_template, data)
-
+        
         if not isinstance(prompt, str) or not prompt.strip():
             raise ValueError("Resolved prompt must not be empty")
-
+        
         llm_settings = self._resolve_llm_settings(data)
         session_id = self._resolve_session_id(data)
         
@@ -325,13 +325,16 @@ class LLMGenerator(AbstractComponent, variant_name="generator"):
             reset_history_each_run=reset_history_each_run,
         )
         
-        logger.info(
-            "LLMGenerator: component_id=%s session_id=%s model=%s base_url=%s prompt_chars=%d",
+        logger.debug(
+            "LLMGenerator.execute: component_id=%s session_id=%s model=%s base_url=%s prompt_chars=%d reset_history=%s update_settings=%s initial_history=%d",
             self.id,
             session_id,
             llm_settings.model,
             llm_settings.base_url,
             len(prompt),
+            reset_history_each_run,
+            update_settings_each_run,
+            len(initial_history or []),
         )
         
         response = self._chat_once(session_id=session_id, prompt=prompt)
@@ -341,5 +344,12 @@ class LLMGenerator(AbstractComponent, variant_name="generator"):
         data[f"{self.id}.response"] = response
         data[f"{self.id}.session_id"] = session_id
         data[f"{self.id}.history"] = self.context.llm_interaction_service.get_history(session_id)
+        logger.info(
+            "LLMGenerator succeeded: component_id=%s session_id=%s response_chars=%d history_messages=%d",
+            self.id,
+            session_id,
+            len(response or ""),
+            len(data[f"{self.id}.history"] or []),
+        )
         
         return data, self.next_component_id

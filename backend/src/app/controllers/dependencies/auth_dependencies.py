@@ -2,7 +2,7 @@ from typing import Callable, Optional
 
 import jwt
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.constants.auth_config import ROLE_ADMIN
 from app.models.auth.user import CurrentUser

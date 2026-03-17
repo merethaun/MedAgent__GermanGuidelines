@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Sequence
 import yake
 
 from app.models.tools.llm_interaction import LLMSettings
-from app.utils.llm_client import LLMClient
+from app.services.tools.llm_interaction_service import LLMInteractionService
 from app.utils.logging import setup_logger
 
 logger = setup_logger(__name__)
@@ -139,6 +139,8 @@ DEFAULT_KEYWORD_SETTINGS = {
 
 
 class KeywordService:
+    def __init__(self, llm_interaction_service: LLMInteractionService):
+        self.llm_interaction_service = llm_interaction_service
     
     @staticmethod
     def _normalize(s: str) -> str:
@@ -345,7 +347,6 @@ class KeywordService:
         Returns:
             List[str]: normalized, deduplicated, ranked phrases.
         """
-        llm = LLMClient(llm_settings)
         params = DEFAULT_KEYWORD_SETTINGS
         if ignore_terms is not None:
             params["ignore_terms"] = ignore_terms
@@ -372,7 +373,10 @@ class KeywordService:
         
         logger.debug("[Keywords] Sending prompt to LLM for keyword extraction.")
         
-        llm_text = llm.chat_text(prompt)
+        llm_text = self.llm_interaction_service.generate_text(
+            llm_settings=llm_settings,
+            prompt=prompt,
+        )
         
         raw_list = self._extract_json_array(llm_text)
         

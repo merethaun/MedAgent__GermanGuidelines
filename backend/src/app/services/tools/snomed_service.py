@@ -13,7 +13,7 @@ from app.models.tools.snomed_interaction import (
     SnomedSynonym,
     SnomedVersionInfo,
 )
-from app.utils.llm_client import LLMClient
+from app.services.tools.llm_interaction_service import LLMInteractionService
 from app.utils.logging import setup_logger
 
 logger = setup_logger(__name__)
@@ -66,7 +66,8 @@ class SnomedSynonymsCacheEntry:
 
 
 class SnomedService:
-    def __init__(self):
+    def __init__(self, llm_interaction_service: LLMInteractionService):
+        self.llm_interaction_service = llm_interaction_service
         self.session = requests.Session()
         self._translation_cache: Dict[Tuple[str, str, str, str], str] = {}
         self._synonym_cache: Dict[Tuple[str, str, Optional[str], bool], SnomedSynonymsCacheEntry] = {}
@@ -119,7 +120,10 @@ class SnomedService:
             target_language=target_language,
             text=text.strip(),
         )
-        translated = LLMClient(llm_settings).chat_text(prompt).strip()
+        translated = self.llm_interaction_service.generate_text(
+            llm_settings=llm_settings,
+            prompt=prompt,
+        ).strip()
         self._translation_cache[cache_key] = translated
         return translated
     
@@ -143,7 +147,7 @@ class SnomedService:
         )
         response.raise_for_status()
         return response.json()
-
+    
     def _get(self, path: str, settings: SnomedSettings, params: Optional[Dict[str, str]] = None) -> Dict:
         response = self.session.get(
             f"{settings.base_url.rstrip('/')}/{path.lstrip('/')}",
@@ -153,13 +157,13 @@ class SnomedService:
         )
         response.raise_for_status()
         return response.json()
-
+    
     @staticmethod
     def _extract_versions_from_codesystem(bundle_json: Dict) -> List[SnomedVersionInfo]:
         entries = bundle_json.get("entry") or []
         versions: List[SnomedVersionInfo] = []
         seen = set()
-
+        
         for entry in entries:
             resource = entry.get("resource") or {}
             version = (resource.get("version") or "").strip()
@@ -173,15 +177,15 @@ class SnomedService:
                     url=(resource.get("url") or "").strip() or None,
                 ),
             )
-
+        
         return versions
-
+    
     @staticmethod
     def _extract_versions_from_metadata(metadata_json: Dict) -> List[SnomedVersionInfo]:
         software_version = ((metadata_json.get("software") or {}).get("version") or "").strip()
         implementation_description = ((metadata_json.get("implementation") or {}).get("description") or "").strip()
         fhir_version = (metadata_json.get("fhirVersion") or "").strip()
-
+        
         versions: List[SnomedVersionInfo] = []
         if software_version:
             versions.append(
@@ -208,7 +212,7 @@ class SnomedService:
                 ),
             )
         return versions
-
+    
     def get_available_versions(self, settings: SnomedSettings) -> Tuple[str, List[SnomedVersionInfo]]:
         try:
             bundle_json = self._get("CodeSystem", settings, params={"url": "http://snomed.info/sct"})
@@ -217,7 +221,7 @@ class SnomedService:
                 return "CodeSystem", versions
         except requests.RequestException:
             logger.exception("SNOMED CodeSystem version discovery failed")
-
+        
         metadata_json = self._get("metadata", settings)
         versions = self._extract_versions_from_metadata(metadata_json)
         return "metadata", versions
@@ -399,7 +403,12 @@ class SnomedService:
             allow_english_fallback: bool = True,
     ) -> List[SnomedMedicalKeywordItem]:
         prompt = MEDICAL_KEYWORD_PROMPT.format(text=text.strip(), max_keywords=max_keywords)
-        raw_keywords = self._json_array(LLMClient(llm_settings).chat_text(prompt))
+        raw_keywords = self._json_array(
+            self.llm_interaction_service.generate_text(
+                llm_settings=llm_settings,
+                prompt=prompt,
+            ),
+        )
         
         cleaned_keywords: List[str] = []
         seen = set()

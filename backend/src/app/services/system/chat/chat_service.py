@@ -1,7 +1,8 @@
 import re
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import List, Optional, Union
+from typing import Any, List, Optional, Union
 
 from bson import ObjectId
 from pymongo.collection import Collection
@@ -41,6 +42,17 @@ class ChatService:
             return ObjectId(value)
         except Exception as e:
             raise ChatNotFoundError(f"Invalid {name}: {value}") from e
+    
+    @staticmethod
+    def _normalize_generator_output(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        try:
+            return json.dumps(value, ensure_ascii=False, default=str)
+        except TypeError:
+            return str(value)
     
     # ----------------------------
     # CRUD
@@ -188,8 +200,9 @@ class ChatService:
         generator_output, retrieval_output, response_latency, retrieval_latency, execution = out
         
         logger.debug(
-            "Workflow result: generator_chars=%s retrieval_n=%s response_latency=%.2fs retrieval_latency=%s",
-            len(generator_output) if generator_output else 0,
+            "Workflow result: generator_type=%s generator_chars=%s retrieval_n=%s response_latency=%.2fs retrieval_latency=%s",
+            type(generator_output).__name__,
+            len(generator_output) if isinstance(generator_output, (str, list, dict, tuple)) and generator_output else 0,
             len(retrieval_output) if retrieval_output else 0,
             float(response_latency) if response_latency is not None else 0.0,
             f"{retrieval_latency:.2f}s" if retrieval_latency is not None else "/",
@@ -197,7 +210,7 @@ class ChatService:
         
         # Attach outputs to the last interaction (the one we just appended)
         last = chat.interactions[-1]
-        last.generator_output = generator_output
+        last.generator_output = self._normalize_generator_output(generator_output)
         
         last.retrieval_output = (
             [RetrievalResult(**r) if isinstance(r, dict) else r for r in retrieval_output]

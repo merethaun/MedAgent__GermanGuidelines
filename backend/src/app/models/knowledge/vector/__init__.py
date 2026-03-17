@@ -1,12 +1,6 @@
 from .embedding_models import (
-    BGEM3EmbeddingProviderSettings,
-    EmbeddingPurpose,
-    EmbeddingProviderSettings,
-    EmbeddingRequest,
-    EmbeddingResponse,
-    OpenAIEmbeddingProviderSettings,
-    VectorizerDescriptor,
-    VectorizerListResponse,
+    BGEM3EmbeddingProviderSettings, EmbeddingProviderSettings, EmbeddingPurpose, EmbeddingRequest, EmbeddingResponse, OpenAIEmbeddingProviderSettings,
+    VectorizerDescriptor, VectorizerListResponse,
 )
 from .weaviate_models import (
     CreateWeaviateCollectionRequest,

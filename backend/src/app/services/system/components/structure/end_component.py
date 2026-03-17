@@ -24,10 +24,16 @@ class EndComponent(AbstractComponent, variant_name="end"):
         generation_key = self.parameters.get("generation_key", "")
         if not generation_key:
             raise ValueError("EndComponent requires a 'generation_key' parameter to know what to return.")
+        retrieval_key = self.parameters.get("retrieval_key", "")
+        logger.debug(
+            "EndComponent.execute: component_id=%s generation_key=%r retrieval_enabled=%s",
+            self.id,
+            generation_key,
+            bool(retrieval_key),
+        )
         final_value = render_template(generation_key, data)
         data[f"{self.id}.response"] = final_value
         
-        retrieval_key = self.parameters.get("retrieval_key", "")
         retrieval_latency_key = self.parameters.get("retrieval_latency_key", "")
         if not retrieval_key:
             logger.info(f"EndComponent has no configured 'retrieval_key', so no return value to be expected")
@@ -40,6 +46,12 @@ class EndComponent(AbstractComponent, variant_name="end"):
             retrieval_latency_value = render_template(retrieval_latency_key, data)
             data[f"{self.id}.retrieval"] = retrieval_value
             data[f"{self.id}.retrieval_latency"] = retrieval_latency_value
+        logger.info(
+            "EndComponent succeeded: component_id=%s response_type=%s retrieval_type=%s",
+            self.id,
+            type(final_value).__name__,
+            type(data[f'{self.id}.retrieval']).__name__ if data.get(f"{self.id}.retrieval") is not None else "None",
+        )
         return data, ""
     
     @classmethod

@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[5] / "src"))
 class FakeObjectId(str):
     def __new__(cls, value=None):
         return str.__new__(cls, value or uuid.uuid4().hex[:24])
-
+    
     @staticmethod
     def is_valid(value):
         return isinstance(value, str) and len(value) == 24
@@ -45,14 +45,16 @@ from app.models.knowledge.guideline import (  # noqa: E402
 from app.models.tools.llm_interaction import LLMSettings  # noqa: E402
 from app.models.tools.snomed_interaction import SnomedKeywordExpansionItem, SnomedSettings  # noqa: E402
 
-_REFERENCE_SERVICE_PATH = Path(__file__).resolve().parents[5] / "src" / "app" / "services" / "knowledge" / "guideline" / "guideline_reference_service.py"
+_REFERENCE_SERVICE_PATH = Path(__file__).resolve().parents[
+                              5] / "src" / "app" / "services" / "knowledge" / "guideline" / "guideline_reference_service.py"
 _REFERENCE_SERVICE_SPEC = importlib.util.spec_from_file_location("test_guideline_reference_service_module", _REFERENCE_SERVICE_PATH)
 _REFERENCE_SERVICE_MODULE = importlib.util.module_from_spec(_REFERENCE_SERVICE_SPEC)
 assert _REFERENCE_SERVICE_SPEC is not None and _REFERENCE_SERVICE_SPEC.loader is not None
 _REFERENCE_SERVICE_SPEC.loader.exec_module(_REFERENCE_SERVICE_MODULE)
 GuidelineReferenceService = _REFERENCE_SERVICE_MODULE.GuidelineReferenceService
 
-_KEYWORD_SERVICE_PATH = Path(__file__).resolve().parents[5] / "src" / "app" / "services" / "knowledge" / "guideline" / "guideline_reference_keyword_service.py"
+_KEYWORD_SERVICE_PATH = Path(__file__).resolve().parents[
+                            5] / "src" / "app" / "services" / "knowledge" / "guideline" / "guideline_reference_keyword_service.py"
 _KEYWORD_SERVICE_SPEC = importlib.util.spec_from_file_location("test_guideline_reference_keyword_service_module", _KEYWORD_SERVICE_PATH)
 _KEYWORD_SERVICE_MODULE = importlib.util.module_from_spec(_KEYWORD_SERVICE_SPEC)
 assert _KEYWORD_SERVICE_SPEC is not None and _KEYWORD_SERVICE_SPEC.loader is not None
@@ -63,7 +65,7 @@ GuidelineReferenceKeywordService = _KEYWORD_SERVICE_MODULE.GuidelineReferenceKey
 class InMemoryCollection:
     def __init__(self, documents=None):
         self.documents = [copy.deepcopy(document) for document in (documents or [])]
-
+    
     def find_one(self, query, projection=None, sort=None):
         docs = self.find(query, projection=None)
         if sort:
@@ -72,18 +74,18 @@ class InMemoryCollection:
         if not docs:
             return None
         return self._apply_projection(copy.deepcopy(docs[0]), projection)
-
+    
     def find(self, query=None, projection=None):
         query = query or {}
         results = [copy.deepcopy(document) for document in self.documents if self._matches(document, query)]
         return [self._apply_projection(document, projection) for document in results]
-
+    
     def insert_one(self, payload):
         document = copy.deepcopy(payload)
         document.setdefault("_id", ObjectId())
         self.documents.append(document)
         return SimpleNamespace(inserted_id=document["_id"])
-
+    
     def update_one(self, query, update):
         matched_count = 0
         for document in self.documents:
@@ -92,7 +94,7 @@ class InMemoryCollection:
                 document.update(copy.deepcopy(update.get("$set", {})))
                 break
         return SimpleNamespace(matched_count=matched_count)
-
+    
     def delete_one(self, query):
         deleted_count = 0
         for index, document in enumerate(self.documents):
@@ -101,7 +103,7 @@ class InMemoryCollection:
                 deleted_count = 1
                 break
         return SimpleNamespace(deleted_count=deleted_count)
-
+    
     def delete_many(self, query):
         remaining_documents = []
         deleted_count = 0
@@ -112,7 +114,7 @@ class InMemoryCollection:
                 remaining_documents.append(document)
         self.documents = remaining_documents
         return SimpleNamespace(deleted_count=deleted_count)
-
+    
     @staticmethod
     def _apply_projection(document, projection):
         if not projection:
@@ -124,7 +126,7 @@ class InMemoryCollection:
         if "_id" in document and ("_id" in include_fields or "_id" not in projection):
             projected["_id"] = document["_id"]
         return projected
-
+    
     @staticmethod
     def _matches(document, query):
         for key, value in query.items():
@@ -141,11 +143,11 @@ class FakeKeywordService:
     def __init__(self):
         self.yake_calls = []
         self.llm_calls = []
-
+    
     def extract_yake(self, **kwargs):
         self.yake_calls.append(kwargs)
         return ["weisheitszahn", "retention"]
-
+    
     def extract_llm(self, text, **kwargs):
         self.llm_calls.append({"text": text, **kwargs})
         return ["operative entfernung", "weisheitszahn"]
@@ -154,7 +156,7 @@ class FakeKeywordService:
 class FakeSnomedService:
     def __init__(self):
         self.calls = []
-
+    
     def expand_keywords(self, keywords, **kwargs):
         self.calls.append({"keywords": keywords, **kwargs})
         return [
@@ -178,7 +180,7 @@ class GuidelineReferenceKeywordServiceTest(unittest.TestCase):
         self.group_id = ObjectId()
         self.reference_id = ObjectId()
         self.other_reference_id = ObjectId()
-
+        
         self.guideline_collection = InMemoryCollection(
             [
                 {"_id": self.guideline_id, "title": "Guideline A"},
@@ -212,7 +214,7 @@ class GuidelineReferenceKeywordServiceTest(unittest.TestCase):
                 },
             ],
         )
-
+        
         self.reference_service = GuidelineReferenceService(
             guideline_collection=self.guideline_collection,
             reference_groups_collection=self.reference_groups_collection,
@@ -225,7 +227,7 @@ class GuidelineReferenceKeywordServiceTest(unittest.TestCase):
             keyword_service=self.keyword_service,
             snomed_service=self.snomed_service,
         )
-
+    
     def test_enriches_single_reference_with_yake(self):
         result = self.service.enrich_keywords(
             ReferenceKeywordEnrichmentRequest(
@@ -236,13 +238,13 @@ class GuidelineReferenceKeywordServiceTest(unittest.TestCase):
                 ),
             ),
         )
-
+        
         self.assertEqual(result.processed_reference_count, 1)
         self.assertEqual(result.references[0].stored_keywords, ["weisheitszahn", "retention"])
         updated_reference = self.reference_service.get_reference_by_id(self.reference_id)
         self.assertEqual(updated_reference.associated_keywords, ["weisheitszahn", "retention"])
         self.assertEqual(len(self.keyword_service.yake_calls), 1)
-
+    
     def test_enriches_group_restricted_to_one_guideline_and_expands_keywords(self):
         result = self.service.enrich_keywords(
             ReferenceKeywordEnrichmentRequest(
@@ -258,7 +260,7 @@ class GuidelineReferenceKeywordServiceTest(unittest.TestCase):
                 ),
             ),
         )
-
+        
         self.assertEqual(result.processed_reference_count, 1)
         self.assertEqual(
             result.references[0].stored_keywords,

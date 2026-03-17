@@ -48,7 +48,7 @@ def test_vector_retriever_maps_hits_to_retrieval_results(monkeypatch):
         "app.services.system.components.retriever.vector_retriever.get_weaviate_vector_store_service",
         lambda: _FakeVectorStoreService(),
     )
-
+    
     retriever = VectorRetriever(
         component_id="retriever",
         name="Vector retriever",
@@ -62,9 +62,9 @@ def test_vector_retriever_maps_hits_to_retrieval_results(monkeypatch):
         },
         variant="vector_retriever",
     )
-
+    
     data, next_component_id = retriever.execute({"start.current_user_input": "appendicitis"})
-
+    
     assert next_component_id == ""
     assert "retriever.latency" in data
     assert data["retriever.references"] == [
@@ -104,7 +104,7 @@ def test_resolve_component_path_for_multi_queries_vector_retriever():
 
 def test_multi_queries_vector_retriever_merges_weighted_hits(monkeypatch):
     seen_requests = []
-
+    
     class FakeVectorStoreService:
         def search(self, collection_name, request):
             assert collection_name == "OpenSource_StructuredGuidelineFixedCharacters500_RefSpec"
@@ -132,7 +132,7 @@ def test_multi_queries_vector_retriever_merges_weighted_hits(monkeypatch):
                         ),
                     ],
                 )
-
+            
             return SimpleNamespace(
                 hits=[
                     SimpleNamespace(
@@ -146,12 +146,12 @@ def test_multi_queries_vector_retriever_merges_weighted_hits(monkeypatch):
                     ),
                 ],
             )
-
+    
     monkeypatch.setattr(
         "app.services.system.components.retriever.vector_retriever.get_weaviate_vector_store_service",
         lambda: FakeVectorStoreService(),
     )
-
+    
     retriever = MultiQueriesVectorRetriever(
         component_id="retriever",
         name="Multi query vector retriever",
@@ -168,9 +168,9 @@ def test_multi_queries_vector_retriever_merges_weighted_hits(monkeypatch):
         },
         variant="multi_queries_vector_retriever",
     )
-
+    
     data, next_component_id = retriever.execute({"start.current_user_input": "appendicitis"})
-
+    
     assert next_component_id == ""
     assert [str(item.reference_id) if item.reference_id else None for item in data["retriever.references"]] == [
         "69b2b1ea9ced93a73a11bcde",

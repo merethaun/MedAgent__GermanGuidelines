@@ -1,0 +1,104 @@
+{
+  "name": "Query Transformer Example Workflow",
+  "nodes": [
+	{
+	  "component_id": "start",
+	  "name": "Start node",
+	  "type": "start",
+	  "parameters": {}
+	},
+	{
+	  "component_id": "context",
+	  "name": "Query context merger",
+	  "type": "query_transformer/query_context_merger",
+	  "parameters": {
+		"query": "{start.current_user_input}",
+		"max_history_items": 3,
+		"max_output_chars": 400,
+		"llm_settings": {
+		  "model": "gpt-4.1-mini",
+		  "api_key": "TODO",
+		  "base_url": "https://api.openai.com/v1",
+		  "max_tokens": 160,
+		  "timeout_s": 60
+		}
+	  }
+	},
+	{
+	  "component_id": "rewrite",
+	  "name": "Clean query rewrite",
+	  "type": "query_transformer/rewrite",
+	  "parameters": {
+		"query": "{context.merged_query}",
+		"rewrite_instructions": "Clean the query by fixing misspellings, spacing, and obvious typos only. Keep the original language and meaning unchanged.",
+		"llm_settings": {
+		  "model": "gpt-4.1-mini",
+		  "api_key": "TODO",
+		  "base_url": "https://api.openai.com/v1",
+		  "max_tokens": 128,
+		  "timeout_s": 60
+		}
+	  }
+	},
+	{
+	  "component_id": "keywords",
+	  "name": "Keyword extraction without synonyms",
+	  "type": "query_transformer/keyword_extractor",
+	  "parameters": {
+		"query": "{rewrite.primary_query}",
+		"extraction_method": "yake",
+		"expand_with_synonyms": false,
+		"min_keywords": 3,
+		"max_keywords": 8
+	  }
+	},
+	{
+	  "component_id": "hyde",
+	  "name": "HyDE hypothetical document generator",
+	  "type": "query_transformer/hyde",
+	  "parameters": {
+		"query": "{rewrite.primary_query}",
+		"prompt_key": "hyde_awmf_query_transform_v1",
+		"num_documents": 1,
+		"target_tokens": 220,
+		"llm_settings": {
+		  "model": "gpt-4.1-mini",
+		  "api_key": "TODO",
+		  "base_url": "https://api.openai.com/v1",
+		  "max_tokens": 512,
+		  "timeout_s": 60
+		}
+	  }
+	},
+	{
+	  "component_id": "end",
+	  "name": "End node",
+	  "type": "end",
+	  "parameters": {
+		"generation_key": "{return {'merged_query': context.merged_query, 'clean_query': rewrite.rewritten_query, 'keywords': keywords.keywords, 'hyde_documents': hyde.documents}}"
+	  }
+	}
+  ],
+  "edges": [
+	{
+	  "source": "start",
+	  "target": "context"
+	},
+	{
+	  "source": "context",
+	  "target": "rewrite"
+	},
+	{
+	  "source": "rewrite",
+	  "target": "keywords"
+	},
+	{
+	  "source": "keywords",
+	  "target": "hyde"
+	},
+	{
+	  "source": "hyde",
+	  "target": "end"
+	}
+  ]
+}

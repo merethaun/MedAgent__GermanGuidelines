@@ -10,7 +10,7 @@ class _FakeLLMInteractionService:
         self.created = []
         self.prompts = []
         self._history = {}
-
+    
     def create_session(self, llm_settings, session_id=None, system_prompt=None, initial_history=None):
         self.created.append(
             {
@@ -21,20 +21,20 @@ class _FakeLLMInteractionService:
             },
         )
         self._history[session_id] = []
-
+    
     def update_session_settings(self, session_id, llm_settings):
         if session_id not in self._history:
             raise LLMChatSessionNotFoundError("missing session")
-
+    
     def reset_history(self, session_id, keep_system_prompt=True):
         self._history[session_id] = []
-
+    
     def chat_text(self, session_id, prompt):
         self.prompts.append(prompt)
         self._history.setdefault(session_id, []).append({"role": "user", "content": prompt})
         self._history[session_id].append({"role": "assistant", "content": "ok"})
         return "ok"
-
+    
     def get_history(self, session_id):
         return list(self._history.get(session_id, []))
 
@@ -60,7 +60,7 @@ def test_generator_resolves_stored_awfm_prompt():
         variant="generator",
     )
     generator.bind_context(ComponentContext(wf_id="wf-1", llm_interaction_service=service))
-
+    
     references = [
         RetrievalResult(
             reference_id="69b2b1ea9ced93a73a11bcde",
@@ -74,7 +74,7 @@ def test_generator_resolves_stored_awfm_prompt():
             weaviate_properties={"headers": "2 Diagnostik / 2.1 Bildgebung"},
         ),
     ]
-
+    
     data, next_component_id = generator.execute(
         {
             "question_text": "Was empfiehlt die Leitlinie zur Bildgebung?",
@@ -82,13 +82,13 @@ def test_generator_resolves_stored_awfm_prompt():
             "retrieved_references": references,
         },
     )
-
+    
     assert next_component_id is None
     assert data["generator.response"] == "ok"
     assert data["generator.session_id"] == "session-1"
     assert service.created[0]["system_prompt"] is not None
     assert "strictly based on official AWMF guidelines" in service.created[0]["system_prompt"]
-
+    
     prompt = data["generator.prompt"]
     assert prompt.startswith("<context>")
     assert "<context_item id=\"0\" section=\"1 Akutes Abdomen / 1.1 Appendizitis\">" in prompt
@@ -109,7 +109,7 @@ def test_generator_rejects_unknown_prompt_key():
         variant="generator",
     )
     generator.bind_context(ComponentContext(wf_id="wf-1", llm_interaction_service=_FakeLLMInteractionService()))
-
+    
     try:
         generator.execute({"start.current_user_input": "Frage"})
     except ValueError as exc:

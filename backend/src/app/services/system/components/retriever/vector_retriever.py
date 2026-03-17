@@ -4,7 +4,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from app.models.knowledge.vector import WeaviateSearchRequest
 from app.models.system.system_chat_interaction import RetrievalResult
 from app.models.system.workflow_retriever import (
-    MultiQueryVectorQuery,
     MultiQueryVectorRetrieverSettings,
     VectorRetrieverSettings,
 )
@@ -37,10 +36,10 @@ def _map_hit_to_retrieval_result(
     reference_id = properties.get(reference_id_property)
     source_id = properties.get(source_id_property)
     retrieval_text = properties.get(content_property)
-
+    
     if reference_id is None and (source_id is None or retrieval_text is None):
         return None
-
+    
     return RetrievalResult(
         reference_id=reference_id,
         source_id=source_id,
@@ -65,7 +64,7 @@ class VectorRetriever(AbstractRetriever, variant_name="vector_retriever"):
             },
         )
         return base
-
+    
     @classmethod
     def get_output_spec(cls) -> Dict[str, Dict[str, Any]]:
         base = super().get_output_spec()
@@ -78,16 +77,25 @@ class VectorRetriever(AbstractRetriever, variant_name="vector_retriever"):
             },
         )
         return base
-
+    
     def _resolve_settings(self, data: Dict[str, Any]) -> VectorRetrieverSettings:
         raw_settings = self.parameters.get("settings")
         if raw_settings is None:
             raise ValueError("VectorRetriever requires a 'settings' object.")
         rendered = _render_value(raw_settings, data)
         return VectorRetrieverSettings.model_validate(rendered)
-
+    
     def retrieve(self, query: str, data: Dict[str, Any]) -> Tuple[List[RetrievalResult], float]:
         settings = self._resolve_settings(data)
+        logger.debug(
+            "VectorRetriever.retrieve: component_id=%s collection=%s vector=%s mode=%s limit=%s query_chars=%d",
+            self.id,
+            settings.weaviate_collection,
+            settings.vector_name,
+            settings.mode,
+            settings.limit,
+            len(query),
+        )
         request = WeaviateSearchRequest(
             query=query,
             vector_name=settings.vector_name,
@@ -98,11 +106,11 @@ class VectorRetriever(AbstractRetriever, variant_name="vector_retriever"):
             alpha=settings.alpha,
             minimum_score=settings.minimum_score,
         )
-
+        
         started = time.time()
         response = get_weaviate_vector_store_service().search(settings.weaviate_collection, request)
         latency = time.time() - started
-
+        
         references: List[RetrievalResult] = []
         for hit in response.hits:
             properties = hit.properties or {}
@@ -121,11 +129,12 @@ class VectorRetriever(AbstractRetriever, variant_name="vector_retriever"):
                     settings.content_property,
                 )
                 continue
-
+            
             references.append(retrieval_result)
-
+        
         logger.info(
-            "VectorRetriever searched collection=%s vector=%s mode=%s returned=%d",
+            "VectorRetriever succeeded: component_id=%s collection=%s vector=%s mode=%s returned=%d",
+            self.id,
             settings.weaviate_collection,
             settings.vector_name,
             settings.mode,
@@ -143,7 +152,7 @@ class MultiQueriesVectorRetriever(AbstractRetriever, variant_name="multi_queries
                 "description": "MultiQueryVectorRetrieverSettings payload used for weighted multi-query Weaviate search.",
             },
         }
-
+    
     @classmethod
     def get_output_spec(cls) -> Dict[str, Dict[str, Any]]:
         return {
@@ -160,7 +169,7 @@ class MultiQueriesVectorRetriever(AbstractRetriever, variant_name="multi_queries
                 "description": "Resolved query configurations used during execution.",
             },
         }
-
+    
     def _resolve_settings(self, data: Dict[str, Any]) -> MultiQueryVectorRetrieverSettings:
         raw_settings = self.parameters.get("settings")
         if raw_settings is None:
@@ -174,29 +183,45 @@ class MultiQueriesVectorRetriever(AbstractRetriever, variant_name="multi_queries
                     if isinstance(query_config, dict) and "query" not in query_config:
                         query_config["query"] = fallback_query
         return MultiQueryVectorRetrieverSettings.model_validate(rendered)
-
+    
     @staticmethod
     def _dedupe_key(result: RetrievalResult) -> str:
         if result.reference_id is not None:
             return f"reference:{result.reference_id}"
         return f"source:{result.source_id}|text:{result.retrieval}"
-
+    
     def retrieve(self, query: str, data: Dict[str, Any]) -> Tuple[List[RetrievalResult], float]:
         raise NotImplementedError("MultiQueriesVectorRetriever uses execute() to handle multiple queries.")
-
+    
     def execute(self, data: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
         try:
             settings = self._resolve_settings(data)
             service = get_weaviate_vector_store_service()
             started = time.time()
-
+            logger.debug(
+                "MultiQueriesVectorRetriever.execute: component_id=%s collection=%s configured_queries=%d limit=%s per_query_limit=%s",
+                self.id,
+                settings.weaviate_collection,
+                len(settings.queries),
+                settings.limit,
+                settings.per_query_limit,
+            )
+            
             merged_results: Dict[str, Dict[str, Any]] = {}
             resolved_queries: List[Dict[str, Any]] = []
-
+            
             for query_config in settings.queries:
                 if not query_config.query.strip():
                     continue
-
+                logger.debug(
+                    "MultiQueriesVectorRetriever sub-query: component_id=%s query=%r vector=%s weight=%s mode=%s",
+                    self.id,
+                    query_config.query,
+                    query_config.vector_name,
+                    query_config.weight,
+                    query_config.mode.value,
+                )
+                
                 resolved_queries.append(
                     {
                         "query": query_config.query,
@@ -205,7 +230,7 @@ class MultiQueriesVectorRetriever(AbstractRetriever, variant_name="multi_queries
                         "mode": query_config.mode.value,
                     },
                 )
-
+                
                 request = WeaviateSearchRequest(
                     query=query_config.query,
                     vector_name=query_config.vector_name,
@@ -217,7 +242,7 @@ class MultiQueriesVectorRetriever(AbstractRetriever, variant_name="multi_queries
                     minimum_score=settings.minimum_score,
                 )
                 response = service.search(settings.weaviate_collection, request)
-
+                
                 for rank, hit in enumerate(response.hits, start=1):
                     result = _map_hit_to_retrieval_result(
                         hit=hit,
@@ -227,11 +252,11 @@ class MultiQueriesVectorRetriever(AbstractRetriever, variant_name="multi_queries
                     )
                     if result is None:
                         continue
-
+                    
                     score = hit.score if hit.score is not None else max(0.0, 1.0 - ((rank - 1) / max(settings.per_query_limit, 1)))
                     weighted_score = float(score) * query_config.weight
                     key = self._dedupe_key(result)
-
+                    
                     current = merged_results.get(key)
                     if current is None:
                         merged_results[key] = {
@@ -240,7 +265,7 @@ class MultiQueriesVectorRetriever(AbstractRetriever, variant_name="multi_queries
                         }
                     else:
                         current["score"] += weighted_score
-
+            
             ranked_results = [
                 entry["result"]
                 for entry in sorted(
@@ -250,16 +275,18 @@ class MultiQueriesVectorRetriever(AbstractRetriever, variant_name="multi_queries
                 )[:settings.limit]
             ]
             latency = time.time() - started
-
+            
             data[f"{self.id}.queries"] = resolved_queries
             data[f"{self.id}.references"] = ranked_results
             data[f"{self.id}.latency"] = latency
-
+            
             logger.info(
-                "MultiQueriesVectorRetriever searched collection=%s queries=%d returned=%d",
+                "MultiQueriesVectorRetriever succeeded: component_id=%s collection=%s queries=%d returned=%d latency=%.2fs",
+                self.id,
                 settings.weaviate_collection,
                 len(resolved_queries),
                 len(ranked_results),
+                latency,
             )
             return data, self.next_component_id or ""
         except Exception as e:

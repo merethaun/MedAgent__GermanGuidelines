@@ -173,8 +173,8 @@ def delete_vector_object(
     response_model=WeaviateSearchResponse,
     summary="Search a vector collection (admin only)",
     description=(
-        "Runs vector or hybrid search against one named vector. "
-        "Hybrid mode combines BM25 over keyword_properties with the selected query embedding."
+            "Runs vector or hybrid search against one named vector. "
+            "Hybrid mode combines BM25 over keyword_properties with the selected query embedding."
     ),
     dependencies=[Depends(require_roles(ROLE_ADMIN))],
 )
@@ -202,9 +202,9 @@ def search_vector_collection(
     response_model=IngestReferenceGroupResponse,
     summary="Ingest the linked reference group into a vector collection (admin only)",
     description=(
-        "Reads all references from the collection's linked reference group, maps them into collection properties "
-        "using the stored ingestion mapping, computes named vectors, and inserts the resulting objects into Weaviate. "
-        "If guideline_id is supplied in the request body, only that guideline is replaced."
+            "Reads all references from the collection's linked reference group, maps them into collection properties "
+            "using the stored ingestion mapping, computes named vectors, and inserts the resulting objects into Weaviate. "
+            "If guideline_id is supplied in the request body, only that guideline is replaced."
     ),
     dependencies=[Depends(require_roles(ROLE_ADMIN))],
 )

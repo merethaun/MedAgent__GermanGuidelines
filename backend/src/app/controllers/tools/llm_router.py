@@ -92,13 +92,13 @@ def llm_chat_stream(
 ):
     try:
         logger.info("Tools/LLM chat stream: session_id=%s prompt_chars=%d", session_id, len(req.prompt))
-
+        
         def gen():
             for piece in service.chat_stream_text(session_id=session_id, prompt=req.prompt):
                 yield piece
-
+        
         return StreamingResponse(gen(), media_type="text/plain")
-
+    
     except LLMChatSessionNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:

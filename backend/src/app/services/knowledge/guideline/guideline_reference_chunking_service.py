@@ -325,38 +325,38 @@ class GuidelineReferenceChunkingService:
             for paragraph in re.split(r"(?:\r?\n){2,}", text)
             if paragraph.strip()
         ] or [text]
-
+    
     @staticmethod
     def _split_fixed_characters_without_cutting_words(text: str, max_characters: int) -> List[str]:
         normalized_text = text.strip()
         if not normalized_text:
             return [text]
-
+        
         chunks: List[str] = []
         remaining_text = normalized_text
-
+        
         while len(remaining_text) > max_characters:
             candidate = remaining_text[:max_characters]
             if remaining_text[max_characters:max_characters + 1].isspace():
                 split_index = max_characters
             else:
                 split_index = candidate.rfind(" ")
-
+            
             if split_index <= 0:
                 # Fall back for single words longer than the limit.
                 split_index = max_characters
-
+            
             chunk = remaining_text[:split_index].strip()
             if not chunk:
                 split_index = max_characters
                 chunk = remaining_text[:split_index].strip()
-
+            
             chunks.append(chunk)
             remaining_text = remaining_text[split_index:].strip()
-
+        
         if remaining_text:
             chunks.append(remaining_text)
-
+        
         return chunks or [text]
     
     def _reindex_document_hierarchy(self, references: Iterable[Dict]) -> None:

@@ -146,7 +146,7 @@ class GuidelineReferenceBase(BaseModel, ABC):
         arbitrary_types_allowed=True,
         populate_by_name=True,
     )
-
+    
     @abstractmethod
     def extract_content(self) -> str:
         raise NotImplementedError
@@ -391,7 +391,7 @@ class ReferenceKeywordEnrichmentRequest(BaseModel):
         default=True,
         description="Replace `associated_keywords` instead of merging with any existing values.",
     )
-
+    
     @model_validator(mode="after")
     def validate_target_combination(self):
         reference_id = self.reference_id

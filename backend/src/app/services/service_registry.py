@@ -20,7 +20,7 @@ from .knowledge.guideline import (
 from .knowledge.vector import EmbeddingService, WeaviateVectorStoreService
 from .system import WorkflowSystemInteractionService, WorkflowSystemStorageService
 from .system.chat import ChatService
-from .tools import KeywordService, LLMInteractionService, SnomedService
+from .tools import KeywordService, LLMInteractionService, QueryTransformationService, SnomedService
 
 _auth_service: Optional[AuthService] = None
 _token_service: Optional[TokenService] = TokenService()
@@ -39,6 +39,7 @@ _llm_interaction_service: Optional[LLMInteractionService] = None
 
 _workflow_storage_service: Optional[WorkflowSystemStorageService] = None
 _workflow_interaction_service: Optional[WorkflowSystemInteractionService] = None
+_query_transformation_service: Optional[QueryTransformationService] = None
 _chat_service: Optional[ChatService] = None
 
 
@@ -71,7 +72,7 @@ def init_services() -> None:
             reference_groups_collection=get_collection(GUIDELINE_REFERENCE_GROUP_COLLECTION),
             reference_collection=get_collection(GUIDELINE_REFERENCE_COLLECTION),
         )
-
+    
     global _guideline_reference_chunking_service
     if _guideline_reference_chunking_service is None:
         _guideline_reference_chunking_service = GuidelineReferenceChunkingService(
@@ -79,11 +80,11 @@ def init_services() -> None:
             guideline_service=_guideline_service,
             bounding_box_finder_service=_bounding_box_finder_service,
         )
-
+    
     global _embedding_service
     if _embedding_service is None:
         _embedding_service = EmbeddingService()
-
+    
     global _weaviate_vector_store_service
     if _weaviate_vector_store_service is None:
         _weaviate_vector_store_service = WeaviateVectorStoreService(
@@ -93,14 +94,18 @@ def init_services() -> None:
             guideline_reference_service=_guideline_reference_service,
         )
     
+    global _llm_interaction_service
+    if _llm_interaction_service is None:
+        _llm_interaction_service = LLMInteractionService()
+    
     global _keyword_service
     if _keyword_service is None:
-        _keyword_service = KeywordService()
-
+        _keyword_service = KeywordService(_llm_interaction_service)
+    
     global _snomed_service
     if _snomed_service is None:
-        _snomed_service = SnomedService()
-
+        _snomed_service = SnomedService(_llm_interaction_service)
+    
     global _guideline_reference_keyword_service
     if _guideline_reference_keyword_service is None:
         _guideline_reference_keyword_service = GuidelineReferenceKeywordService(
@@ -109,10 +114,6 @@ def init_services() -> None:
             snomed_service=_snomed_service,
         )
     
-    global _llm_interaction_service
-    if _llm_interaction_service is None:
-        _llm_interaction_service = LLMInteractionService()
-    
     global _workflow_storage_service
     if _workflow_storage_service is None:
         _workflow_storage_service = WorkflowSystemStorageService(get_collection(WORKFLOW_SYSTEM_COLLECTION))
@@ -120,6 +121,10 @@ def init_services() -> None:
     global _workflow_interaction_service
     if _workflow_interaction_service is None:
         _workflow_interaction_service = WorkflowSystemInteractionService(_workflow_storage_service, _llm_interaction_service)
+    
+    global _query_transformation_service
+    if _query_transformation_service is None:
+        _query_transformation_service = QueryTransformationService(_llm_interaction_service)
     
     global _chat_service
     if _chat_service is None:
@@ -237,6 +242,14 @@ def get_workflow_interaction_service() -> WorkflowSystemInteractionService:
         init_services()
     assert _workflow_interaction_service is not None
     return _workflow_interaction_service
+
+
+def get_query_transformation_service() -> QueryTransformationService:
+    global _query_transformation_service
+    if _query_transformation_service is None:
+        init_services()
+    assert _query_transformation_service is not None
+    return _query_transformation_service
 
 
 def get_chat_service() -> ChatService:

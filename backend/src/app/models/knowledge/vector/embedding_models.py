@@ -11,7 +11,7 @@ class EmbeddingPurpose(str, Enum):
 
 class VectorizerDescriptor(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     provider: str
     display_name: str
     description: str
@@ -24,13 +24,13 @@ class VectorizerDescriptor(BaseModel):
 
 class VectorizerListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     vectorizers: List[VectorizerDescriptor]
 
 
 class OpenAIEmbeddingProviderSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     provider: Literal["openai-text-embedding-3-large"]
     api_key: SecretStr = Field(..., description="API key used for this embedding request.")
     base_url: Optional[str] = Field(
@@ -42,7 +42,7 @@ class OpenAIEmbeddingProviderSettings(BaseModel):
 
 class BGEM3EmbeddingProviderSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     provider: Literal["baai-bge-m3"]
     model_name: str = Field(default="BAAI/bge-m3", description="Model id or local path to load.")
     batch_size: int = Field(default=8, ge=1, description="Batch size used for local inference.")
@@ -56,7 +56,7 @@ EmbeddingProviderSettings = Annotated[
 
 class EmbeddingRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     provider: str = Field(..., description="Registered vectorizer provider id.")
     texts: List[str] = Field(..., min_length=1, description="One or more texts to embed.")
     provider_settings: Optional[EmbeddingProviderSettings] = Field(
@@ -71,14 +71,14 @@ class EmbeddingRequest(BaseModel):
         default=False,
         description="If true, L2-normalize each returned vector before sending it back.",
     )
-
+    
     @field_validator("texts")
     @classmethod
     def _validate_texts(cls, texts: List[str]) -> List[str]:
         if any(not text.strip() for text in texts):
             raise ValueError("texts must not contain empty entries")
         return texts
-
+    
     @model_validator(mode="after")
     def _validate_provider_settings(self) -> "EmbeddingRequest":
         if self.provider_settings is not None and self.provider_settings.provider != self.provider:
@@ -88,7 +88,7 @@ class EmbeddingRequest(BaseModel):
 
 class EmbeddingResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
+    
     provider: str
     purpose: EmbeddingPurpose
     normalize: bool
