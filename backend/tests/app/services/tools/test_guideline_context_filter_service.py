@@ -1,3 +1,5 @@
+import json
+
 from bson import ObjectId
 
 from app.models.knowledge.guideline.guideline_reference import GuidelineHierarchyEntry, GuidelineTextReference
@@ -20,6 +22,31 @@ class _FakeLLMInteractionService:
         return self.response
 
 
+class _FakeSequentialLLMInteractionService:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    def generate_text(self, **kwargs):
+        self.calls.append(kwargs)
+        assert self.responses, "No fake LLM responses left"
+        return self.responses.pop(0)
+
+
+def json_response(start_index: int, batch_size: int) -> str:
+    return json.dumps(
+        [
+            {
+                "index": index,
+                "keep": True,
+                "score": 0.9,
+                "reason": f"batch-{start_index}",
+            }
+            for index in range(start_index, start_index + batch_size)
+        ],
+    )
+
+
 def _references():
     return [
         GuidelineTextReference(
@@ -34,6 +61,25 @@ def _references():
             contained_text="Gallstones may present differently.",
             document_hierarchy=[GuidelineHierarchyEntry(title="Gallstones", heading_level=1, heading_number="4.2", order=42)],
         ),
+    ]
+
+
+def _many_references(count: int):
+    return [
+        GuidelineTextReference(
+            _id=ObjectId(f"{index + 1:024x}"),
+            guideline_id=ObjectId("69b2b1ea9ced93a73a11bcdf"),
+            contained_text=f"Reference {index}",
+            document_hierarchy=[
+                GuidelineHierarchyEntry(
+                    title=f"Section {index}",
+                    heading_level=1,
+                    heading_number=str(index + 1),
+                    order=index,
+                ),
+            ],
+        )
+        for index in range(count)
     ]
 
 
@@ -136,7 +182,102 @@ def test_llm_filter_parses_json_and_keeps_selected_items():
     assert response.decisions[0].kept is True
     assert response.decisions[1].kept is False
     assert len(llm.calls) == 1
-    assert "References" in llm.calls[0]["prompt"]
+    assert "REFERENCES" in llm.calls[0]["prompt"]
+
+
+def test_llm_filter_accepts_object_wrapped_decisions():
+    llm = _FakeLLMInteractionService(
+        """
+        {
+          "decisions": [
+            {"index": 0, "keep": true, "score": 0.93, "reason": "Directly discusses appendicitis."},
+            {"index": 1, "keep": false, "score": 0.12, "reason": "Off-topic biliary result."}
+          ]
+        }
+        """.strip(),
+    )
+    service = GuidelineContextFilterService(llm_interaction_service=llm)
+
+    response = service.filter_references(
+        GuidelineContextFilterRequest(
+            filter_input="appendicitis diagnostics",
+            references=_references(),
+            settings=GuidelineContextFilterSettings(
+                kind=GuidelineContextFilterKind.RELEVANCE,
+                method=GuidelineContextFilterMethod.LLM,
+                llm_settings={"model": "gpt-test"},
+                properties=[
+                    {"path": "content", "label": "text"},
+                    {"path": "heading_path", "label": "section"},
+                ],
+            ),
+        ),
+    )
+
+    assert len(response.kept_references) == 1
+    assert response.decisions[0].kept is True
+    assert response.decisions[1].kept is False
+
+
+def test_llm_filter_can_judge_in_batches():
+    responses = [
+        json_response(0, 10),
+        json_response(10, 10),
+        json_response(20, 2),
+    ]
+    llm = _FakeSequentialLLMInteractionService(responses)
+    service = GuidelineContextFilterService(llm_interaction_service=llm)
+
+    response = service.filter_references(
+        GuidelineContextFilterRequest(
+            filter_input="batched query",
+            references=_many_references(22),
+            settings=GuidelineContextFilterSettings(
+                kind=GuidelineContextFilterKind.RELEVANCE,
+                method=GuidelineContextFilterMethod.LLM,
+                llm_settings={"model": "gpt-test"},
+                llm_batch_size=10,
+                properties=[{"path": "content", "label": "text"}],
+            ),
+        ),
+    )
+
+    assert len(llm.calls) == 3
+    assert '"index": 0' in llm.calls[0]["prompt"]
+    assert '"index": 9' in llm.calls[0]["prompt"]
+    assert '"index": 10' in llm.calls[1]["prompt"]
+    assert '"index": 19' in llm.calls[1]["prompt"]
+    assert '"index": 20' in llm.calls[2]["prompt"]
+    assert '"index": 21' in llm.calls[2]["prompt"]
+    assert len(response.decisions) == 22
+    assert all(decision.kept for decision in response.decisions)
+
+
+def test_llm_filter_parse_error_includes_response_preview():
+    service = GuidelineContextFilterService(
+        llm_interaction_service=_FakeLLMInteractionService("This is not JSON at all."),
+    )
+
+    try:
+        service.filter_references(
+            GuidelineContextFilterRequest(
+                filter_input="appendicitis diagnostics",
+                references=_references(),
+                settings=GuidelineContextFilterSettings(
+                    kind=GuidelineContextFilterKind.RELEVANCE,
+                    method=GuidelineContextFilterMethod.LLM,
+                    llm_settings={"model": "gpt-test"},
+                    properties=[
+                        {"path": "content", "label": "text"},
+                        {"path": "heading_path", "label": "section"},
+                    ],
+                ),
+            ),
+        )
+        assert False, "Expected ValueError for invalid LLM filter response"
+    except ValueError as exc:
+        assert "Raw response preview" in str(exc)
+        assert "This is not JSON at all." in str(exc)
 
 
 def test_deduplicate_filter_keeps_highest_scoring_duplicate():

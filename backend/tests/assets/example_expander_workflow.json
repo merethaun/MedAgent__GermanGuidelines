@@ -1,0 +1,168 @@
+{
+  "name": "Vector Retrieval + Neighborhood + Cross-Encoder + Hierarchy + LLM Filter + Generator",
+  "nodes": [
+    {
+      "component_id": "start",
+      "name": "Start node",
+      "type": "start",
+      "parameters": {}
+    },
+    {
+      "component_id": "retriever",
+      "name": "Guideline vector retriever",
+      "type": "retriever/vector_retriever",
+      "parameters": {
+        "query": "{start.current_user_input}",
+        "settings": {
+          "weaviate_collection": "OpenSource_StructuredGuidelineFixedCharacters500_RefSpec",
+          "vector_name": "text",
+          "limit": 8,
+          "mode": "vector"
+        }
+      }
+    },
+    {
+      "component_id": "neighborhood",
+      "name": "Neighborhood expander",
+      "type": "expander/neighborhood_references",
+      "parameters": {
+        "references_key": "retriever.references",
+        "settings": {
+          "kind": "neighborhood",
+          "context_window_size": 2,
+          "direction": "both"
+        }
+      }
+    },
+    {
+      "component_id": "cross_encoder",
+      "name": "Cross-encoder relevance filter",
+      "type": "filter/relevance_filter_references",
+      "parameters": {
+        "references_key": "neighborhood.references",
+        "filter_input": "{start.current_user_input}",
+        "settings": {
+          "kind": "relevance",
+          "method": "cross_encoder",
+          "minimum_score": 0.4,
+          "keep_top_k": 6,
+          "cross_encoder_model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+          "properties": [
+            {
+              "path": "content",
+              "label": "text"
+            },
+            {
+              "path": "heading_path",
+              "label": "section"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "component_id": "hierarchy",
+      "name": "Hierarchy expander",
+      "type": "expander/hierarchy_references",
+      "parameters": {
+        "references_key": "cross_encoder.references",
+        "settings": {
+          "kind": "hierarchy",
+          "mode": "direct_parent"
+        }
+      }
+    },
+    {
+      "component_id": "llm_relevance",
+      "name": "LLM relevance filter",
+      "type": "filter/relevance_filter_references",
+      "parameters": {
+        "references_key": "hierarchy.references",
+        "filter_input": "{start.current_user_input}",
+        "settings": {
+          "kind": "relevance",
+          "method": "llm",
+          "minimum_score": 0.65,
+          "keep_top_k": 4,
+          "llm_settings": {
+            "model": "gpt-4o-mini",
+            "api_key": "TODO",
+            "base_url": "https://api.openai.com/v1",
+            "max_tokens": 256,
+            "timeout_s": 60
+          },
+          "properties": [
+            {
+              "path": "content",
+              "label": "text"
+            },
+            {
+              "path": "heading_path",
+              "label": "section"
+            },
+            {
+              "path": "type",
+              "label": "reference_type"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "component_id": "generator",
+      "name": "OpenAI Generator",
+      "type": "generator",
+      "parameters": {
+        "prompt_key": "awmf_clinical_qa_html_v1",
+        "prompt": "{\ncontexts = []\nfor i, ref in enumerate(llm_relevance.references):\n    section = ' / '.join([entry.title for entry in (ref.document_hierarchy or []) if entry.title])\n    text = ref.extract_content() or ''\n    contexts.append(f'''<context_item id=\"{i}\" section=\"{section}\" type=\"{ref.type}\">\\n{text}\\n</context_item>''')\nreturn f'''<context>{chr(10).join(contexts)}</context>\\n<question>{start.current_user_input}</question>'''\n}",
+        "llm_settings": {
+          "model": "gpt-4o-mini",
+          "api_key": "TODO",
+          "base_url": "https://api.openai.com/v1",
+          "max_tokens": 512,
+          "timeout_s": 60
+        }
+      }
+    },
+    {
+      "component_id": "end",
+      "name": "End node",
+      "type": "end",
+      "parameters": {
+        "generation_key": "{generator.response}",
+        "retrieval_key": "{llm_relevance.references}",
+        "retrieval_latency_key": "{retriever.latency + neighborhood.latency + cross_encoder.latency + hierarchy.latency + llm_relevance.latency}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "start",
+      "target": "retriever"
+    },
+    {
+      "source": "retriever",
+      "target": "neighborhood"
+    },
+    {
+      "source": "neighborhood",
+      "target": "cross_encoder"
+    },
+    {
+      "source": "cross_encoder",
+      "target": "hierarchy"
+    },
+    {
+      "source": "hierarchy",
+      "target": "llm_relevance"
+    },
+    {
+      "source": "llm_relevance",
+      "target": "generator"
+    },
+    {
+      "source": "generator",
+      "target": "end"
+    }
+  ]
+}

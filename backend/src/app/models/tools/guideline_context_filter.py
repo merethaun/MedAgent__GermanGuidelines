@@ -56,6 +56,12 @@ class GuidelineContextFilterSettings(BaseModel):
 
     llm_settings: Optional[LLMSettings] = Field(default=None)
     llm_system_prompt: Optional[str] = Field(default=None)
+    llm_batch_size: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=100,
+        description="Optional number of references to judge per LLM call. If omitted, all references are judged in one batch.",
+    )
 
     deduplicate_use_normalized_text: bool = Field(default=True)
     deduplicate_keep_strategy: str = Field(

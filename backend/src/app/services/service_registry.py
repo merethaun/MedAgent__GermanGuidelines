@@ -16,11 +16,12 @@ from .knowledge.guideline import (
     GuidelineReferenceKeywordService,
     GuidelineReferenceService,
     GuidelineService,
+    ReferenceHierarchyIndexService,
 )
 from .knowledge.vector import EmbeddingService, WeaviateVectorStoreService
 from .system import WorkflowSystemInteractionService, WorkflowSystemStorageService
 from .system.chat import ChatService
-from .tools import GuidelineContextFilterService, KeywordService, LLMInteractionService, QueryTransformationService, SnomedService
+from .tools import GuidelineContextFilterService, GuidelineExpanderService, KeywordService, LLMInteractionService, QueryTransformationService, SnomedService
 
 _auth_service: Optional[AuthService] = None
 _token_service: Optional[TokenService] = TokenService()
@@ -30,6 +31,7 @@ _guideline_service: Optional[GuidelineService] = None
 _guideline_reference_service: Optional[GuidelineReferenceService] = None
 _guideline_reference_chunking_service: Optional[GuidelineReferenceChunkingService] = None
 _guideline_reference_keyword_service: Optional[GuidelineReferenceKeywordService] = None
+_reference_hierarchy_index_service: Optional[ReferenceHierarchyIndexService] = None
 _embedding_service: Optional[EmbeddingService] = None
 _weaviate_vector_store_service: Optional[WeaviateVectorStoreService] = None
 
@@ -37,6 +39,7 @@ _keyword_service: Optional[KeywordService] = None
 _snomed_service: Optional[SnomedService] = None
 _llm_interaction_service: Optional[LLMInteractionService] = None
 _guideline_context_filter_service: Optional[GuidelineContextFilterService] = None
+_guideline_expander_service: Optional[GuidelineExpanderService] = None
 
 _workflow_storage_service: Optional[WorkflowSystemStorageService] = None
 _workflow_interaction_service: Optional[WorkflowSystemInteractionService] = None
@@ -81,6 +84,10 @@ def init_services() -> None:
             guideline_service=_guideline_service,
             bounding_box_finder_service=_bounding_box_finder_service,
         )
+
+    global _reference_hierarchy_index_service
+    if _reference_hierarchy_index_service is None:
+        _reference_hierarchy_index_service = ReferenceHierarchyIndexService(_guideline_reference_service)
     
     global _embedding_service
     if _embedding_service is None:
@@ -94,7 +101,7 @@ def init_services() -> None:
             guideline_service=_guideline_service,
             guideline_reference_service=_guideline_reference_service,
         )
-    
+
     global _llm_interaction_service
     if _llm_interaction_service is None:
         _llm_interaction_service = LLMInteractionService()
@@ -106,6 +113,13 @@ def init_services() -> None:
     global _guideline_context_filter_service
     if _guideline_context_filter_service is None:
         _guideline_context_filter_service = GuidelineContextFilterService(_llm_interaction_service)
+
+    global _guideline_expander_service
+    if _guideline_expander_service is None:
+        _guideline_expander_service = GuidelineExpanderService(
+            reference_service=_guideline_reference_service,
+            hierarchy_index_service=_reference_hierarchy_index_service,
+        )
 
     global _snomed_service
     if _snomed_service is None:
@@ -193,6 +207,14 @@ def get_guideline_reference_keyword_service() -> GuidelineReferenceKeywordServic
     return _guideline_reference_keyword_service
 
 
+def get_reference_hierarchy_index_service() -> ReferenceHierarchyIndexService:
+    global _reference_hierarchy_index_service
+    if _reference_hierarchy_index_service is None:
+        init_services()
+    assert _reference_hierarchy_index_service is not None
+    return _reference_hierarchy_index_service
+
+
 def get_keyword_service() -> KeywordService:
     global _keyword_service
     if _keyword_service is None:
@@ -239,6 +261,14 @@ def get_guideline_context_filter_service() -> GuidelineContextFilterService:
         init_services()
     assert _guideline_context_filter_service is not None
     return _guideline_context_filter_service
+
+
+def get_guideline_expander_service() -> GuidelineExpanderService:
+    global _guideline_expander_service
+    if _guideline_expander_service is None:
+        init_services()
+    assert _guideline_expander_service is not None
+    return _guideline_expander_service
 
 
 def get_workflow_storage_service() -> WorkflowSystemStorageService:

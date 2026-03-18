@@ -7,6 +7,7 @@ from .guideline_reference import (
     ReferenceKeywordEnrichmentItem, ReferenceKeywordEnrichmentRequest, ReferenceKeywordEnrichmentResult, ReferenceKeywordExpansionSettings,
     ReferenceKeywordSettings, ReferenceKeywordUpdateRequest, ReferenceType,
 )
+from .reference_hierarchy_models import ReferenceHierarchyIndexBuildResponse, ReferenceHierarchyIndexNode, ReferenceHierarchyIndexSnapshot
 
 __all__ = [
     "GuidelineEntry", "GuidelineDownloadInformation", "GuidelineValidityInformation", "OrganizationEntry",
@@ -16,5 +17,6 @@ __all__ = [
     "GuidelineReferenceGroup", "GuidelineStatementReference", "GuidelineTableReference", "GuidelineTextReference",
     "KeywordExtractionStrategy", "REFERENCE_TYPE_MAP", "ReferenceKeywordEnrichmentItem", "ReferenceKeywordEnrichmentRequest",
     "ReferenceKeywordEnrichmentResult", "ReferenceGroupKeywordUpdateRequest", "ReferenceKeywordExpansionSettings",
-    "ReferenceKeywordSettings", "ReferenceKeywordUpdateRequest", "ReferenceType",
+    "ReferenceKeywordSettings", "ReferenceKeywordUpdateRequest", "ReferenceType", "ReferenceHierarchyIndexNode",
+    "ReferenceHierarchyIndexSnapshot", "ReferenceHierarchyIndexBuildResponse",
 ]

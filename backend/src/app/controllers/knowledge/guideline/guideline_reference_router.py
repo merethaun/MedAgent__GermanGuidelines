@@ -15,8 +15,8 @@ from app.exceptions.knowledge.guideline import (
 )
 from app.models.knowledge.guideline import (
     BoundingBox, GuidelineEntry, GuidelineReference, GuidelineReferenceChunkingRequest, GuidelineReferenceChunkingResult,
-    GuidelineReferenceChunkingUpdateRequest, GuidelineReferenceGroup, ReferenceGroupKeywordUpdateRequest, ReferenceKeywordEnrichmentRequest,
-    ReferenceKeywordEnrichmentResult, ReferenceKeywordUpdateRequest, ReferenceType,
+    GuidelineReferenceChunkingUpdateRequest, GuidelineReferenceGroup, ReferenceGroupKeywordUpdateRequest, ReferenceHierarchyIndexBuildResponse,
+    ReferenceKeywordEnrichmentRequest, ReferenceKeywordEnrichmentResult, ReferenceKeywordUpdateRequest, ReferenceType,
 )
 from app.models.knowledge.guideline.bounding_box_finder_api import BoundingBoxFinderRequest
 from app.services.knowledge.guideline import (
@@ -25,6 +25,7 @@ from app.services.knowledge.guideline import (
     GuidelineReferenceKeywordService,
     GuidelineReferenceService,
     GuidelineService,
+    ReferenceHierarchyIndexService,
 )
 from app.services.service_registry import (
     get_bounding_box_finder_service,
@@ -32,6 +33,7 @@ from app.services.service_registry import (
     get_guideline_reference_keyword_service,
     get_guideline_reference_service,
     get_guideline_service,
+    get_reference_hierarchy_index_service,
 )
 
 guideline_reference_router = APIRouter()
@@ -223,6 +225,30 @@ def enrich_reference_keywords(
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@guideline_reference_router.post(
+    "/groups/{reference_group_id}/hierarchy-index",
+    response_model=ReferenceHierarchyIndexBuildResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Build or refresh the hierarchy index for a reference group (admin only)",
+    description=(
+            "Builds a persisted hierarchy index from the selected reference group using only stored guideline-reference hierarchy information. "
+            "The index is later reused by hierarchy-based expansion."
+    ),
+    dependencies=[Depends(require_roles(ROLE_ADMIN))],
+)
+def build_reference_group_hierarchy_index(
+        reference_group_id: str,
+        force: bool = Query(default=False, description="If true, rebuild even when a persisted index already exists."),
+        service: ReferenceHierarchyIndexService = Depends(get_reference_hierarchy_index_service),
+) -> ReferenceHierarchyIndexBuildResponse:
+    try:
+        return service.build_response(reference_group_id, force=force)
+    except GuidelineReferenceGroupNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -244,13 +244,16 @@ class GuidelineContextFilterService:
             serialized_items: List[str],
             settings: GuidelineContextFilterSettings,
     ) -> List[GuidelineContextFilterDecision]:
-        prompt = self._build_llm_prompt(filter_input, serialized_items)
-        raw_response = self.llm_interaction_service.generate_text(
-            llm_settings=settings.llm_settings,
-            system_prompt=settings.llm_system_prompt or DEFAULT_LLM_FILTER_SYSTEM_PROMPT,
-            prompt=prompt,
-        )
-        raw_decisions = self._parse_llm_response(raw_response)
+        raw_decisions: List[Dict[str, Any]] = []
+        for batch_start, batch_items in self._batched_items(serialized_items, settings.llm_batch_size):
+            prompt = self._build_llm_prompt(filter_input, batch_items, start_index=batch_start)
+            raw_response = self.llm_interaction_service.generate_text(
+                llm_settings=settings.llm_settings,
+                system_prompt=settings.llm_system_prompt or DEFAULT_LLM_FILTER_SYSTEM_PROMPT,
+                prompt=prompt,
+            )
+            raw_decisions.extend(self._parse_llm_response(raw_response))
+
         decisions_by_index = {item["index"]: item for item in raw_decisions if "index" in item}
         
         return [
@@ -426,16 +429,27 @@ class GuidelineContextFilterService:
         raise ValueError(f"Unexpected cross-encoder logits shape: {tuple(logits.shape)}")
     
     @staticmethod
-    def _build_llm_prompt(filter_input: str, serialized_items: List[str]) -> str:
+    def _build_llm_prompt(filter_input: str, serialized_items: List[str], *, start_index: int = 0) -> str:
         return (
                 f"FILTER_INPUT:\n<<<\n{filter_input.strip()}\n>>>\n\n"
                 "REFERENCES:\n"
                 + json.dumps(
-            [{"index": index, "reference": item} for index, item in enumerate(serialized_items)],
+            [{"index": start_index + index, "reference": item} for index, item in enumerate(serialized_items)],
             ensure_ascii=False,
             indent=2,
         )
         )
+
+    @staticmethod
+    def _batched_items(items: List[str], batch_size: Optional[int]) -> List[Tuple[int, List[str]]]:
+        if not items:
+            return []
+        if batch_size is None or batch_size >= len(items):
+            return [(0, items)]
+        return [
+            (start, items[start:start + batch_size])
+            for start in range(0, len(items), batch_size)
+        ]
     
     @staticmethod
     def _parse_llm_response(raw_response: str) -> List[Dict[str, Any]]:
@@ -447,13 +461,56 @@ class GuidelineContextFilterService:
             start = text.find("[")
             end = text.rfind("]")
             if start == -1 or end == -1 or end <= start:
-                raise ValueError("Could not parse JSON list from LLM filter response.")
+                parsed_object = GuidelineContextFilterService._try_parse_llm_json_object(text)
+                if parsed_object is None:
+                    preview = GuidelineContextFilterService._response_preview(text)
+                    raise ValueError(f"Could not parse JSON list from LLM filter response. Raw response preview: {preview}")
+                return parsed_object
             text = text[start:end + 1]
-        
-        parsed = json.loads(text)
+
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            parsed_object = GuidelineContextFilterService._try_parse_llm_json_object(text)
+            if parsed_object is None:
+                preview = GuidelineContextFilterService._response_preview(text)
+                raise ValueError(f"Could not parse JSON list from LLM filter response. Raw response preview: {preview}")
+            return parsed_object
         if not isinstance(parsed, list):
             raise ValueError("LLM filter response must be a JSON list.")
         return [item for item in parsed if isinstance(item, dict)]
+
+    @staticmethod
+    def _try_parse_llm_json_object(text: str) -> Optional[List[Dict[str, Any]]]:
+        object_text = text.strip()
+        if object_text.startswith("```"):
+            fence_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", object_text, flags=re.IGNORECASE)
+            if fence_match:
+                object_text = fence_match.group(1).strip()
+
+        if not object_text.startswith("{"):
+            return None
+
+        try:
+            parsed = json.loads(object_text)
+        except json.JSONDecodeError:
+            return None
+
+        if not isinstance(parsed, dict):
+            return None
+
+        for key in ("items", "decisions", "results", "references"):
+            candidate = parsed.get(key)
+            if isinstance(candidate, list):
+                return [item for item in candidate if isinstance(item, dict)]
+        return None
+
+    @staticmethod
+    def _response_preview(text: str, limit: int = 280) -> str:
+        compact = " ".join(text.split())
+        if len(compact) <= limit:
+            return compact
+        return compact[: limit - 3] + "..."
     
     @staticmethod
     def _build_decision(

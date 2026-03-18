@@ -24,7 +24,6 @@ def _render_value(value: Any, data: Dict[str, Any]) -> Any:
         return [_render_value(item, data) for item in value]
     return value
 
-
 def _deserialize_reference_payload(payload: Dict[str, Any]) -> GuidelineReference:
     reference_type = payload.get("type")
     model_cls = REFERENCE_TYPE_MAP.get(reference_type)
@@ -128,7 +127,6 @@ class VectorRetriever(AbstractRetriever, variant_name="vector_retriever"):
                 continue
 
             references.append(reference)
-        
         logger.info(
             "VectorRetriever succeeded: component_id=%s collection=%s vector=%s mode=%s returned=%d",
             self.id,

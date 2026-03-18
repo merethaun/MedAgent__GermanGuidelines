@@ -165,8 +165,10 @@ The currently available component variants are:
 | `start`                                    | [`StartComponent`](./src/app/services/system/components/structure/start_component.py)                             | Required as start to provide user input                                                                                                                                                                                                   |
 | `end`                                      | [`EndComponent`](./src/app/services/system/components/structure/end_component.py)                                 | Required as end to define generator output (text) and retrieval result (references)                                                                                                                                                       |
 | `generator`                                | [`LLMGenerator`](./src/app/services/system/components/generator/generator.py)                                     | Executes the actual text generation step by sending a resolved prompt to the configured LLM and returning the model response. The LLM is configured via [`LLMSettings`](./src/app/models/tools/llm_interaction.py).                       |
-| `filter/deduplicate_references`            | [`DeduplicateReferencesFilter`](./src/app/services/system/components/filter/guideline_context_filter.py)          | Deduplicates a list of guideline references based on configured properties such as `content` and `heading_path`.                                                                                                                         |
-| `filter/relevance_filter_references`       | [`RelevanceFilterReferences`](./src/app/services/system/components/filter/guideline_context_filter.py)            | Relevance-based filtering for guideline references. It can use numeric fields, a cross-encoder, or an LLM judge, and can combine multiple properties into one filter input.                                                            |
+| `expander/neighborhood_references`         | [`NeighborhoodReferencesExpander`](./src/app/services/system/components/expander/reference_expander.py)           | Expands references to surrounding items inside the same guideline and reference group, using the stored guideline-reference heading order. Supports symmetric, preceding-only, or succeeding-only context windows.                        |
+| `expander/hierarchy_references`            | [`HierarchyReferencesExpander`](./src/app/services/system/components/expander/reference_expander.py)              | Expands filtered references to a larger hierarchy section based on the selected reference group. The hierarchy index is persisted as JSON so later runs can reuse it.                                                                     |
+| `filter/deduplicate_references`            | [`DeduplicateReferencesFilter`](./src/app/services/system/components/filter/guideline_context_filter.py)          | Deduplicates a list of guideline references based on configured properties such as `content` and `heading_path`.                                                                                                                          |
+| `filter/relevance_filter_references`       | [`RelevanceFilterReferences`](./src/app/services/system/components/filter/guideline_context_filter.py)            | Relevance-based filtering for guideline references. It can use numeric fields, a cross-encoder, or an LLM judge, and can combine multiple properties into one filter input.                                                               |
 | `query_transformer/query_context_merger`   | [`QueryContextMergerTransformer`](./src/app/services/system/components/query_transformer/query_context_merger.py) | Builds one standalone query from the current user input plus the last `x` chat turns. It only considers prior user inputs and final generator outputs, so it works as a lightweight workflow-level context provider without tool routing. |
 | `query_transformer/rewrite`                | [`QueryRewriteTransformer`](./src/app/services/system/components/query_transformer/query_rewriter.py)             | LLM-based query rewriting. Use `rewrite_instructions` to define the rewrite behavior, for example a clean-query rewrite that only fixes misspellings and spacing.                                                                         |
 | `query_transformer/keyword_extractor`      | [`KeywordQueryTransformer`](./src/app/services/system/components/query_transformer/keyword_transformer.py)        | Extracts query keywords with either `yake` or `llm`, and can optionally expand them with SNOMED synonyms.                                                                                                                                 |
@@ -200,10 +202,13 @@ Create a workflow by posting a JSON object to POST `<backend>/system/workflow` t
   after a context-merging step, without synonyms, and HyDE)
 - [Vector retrieval + generator workflow](./tests/assets/example_vector_retriever_workflow.json) (! need to configure LLM settings and ensure the
   Weaviate collection exists)
-- [Vector retrieval + guideline context filter + generator workflow](./tests/assets/example_guideline_context_filter_workflow.json) (! need to configure LLM
-  settings and ensure the Weaviate collection exists)
-- [Vector retrieval + deduplicate + cross-encoder relevance + LLM relevance + generator workflow](./tests/assets/example_guideline_context_filter_all_in_one_workflow.json) (! need to configure LLM
-  settings and ensure the Weaviate collection exists)
+- [Vector retrieval + guideline context filter + generator workflow](./tests/assets/example_guideline_context_filter_workflow.json) (! need to
+  configure LLM settings and ensure the Weaviate collection exists)
+- [Vector retrieval + deduplicate + cross-encoder relevance + LLM relevance + generator workflow](./tests/assets/example_guideline_context_filter_all_in_one_workflow.json) (!
+  need to configure LLM settings and ensure the Weaviate collection exists)
+- [Vector retrieval + neighborhood expansion + cross-encoder filter + hierarchy expansion + LLM filter + generator workflow](./tests/assets/example_expander_workflow.json) (!
+  need to configure LLM settings; expansion itself works on stored guideline references, need to setup hierarchy index in group on
+  `POST /guideline_references/groups/{reference_group_id}/hierarchy-index`)
 - [Multi-query vector retrieval + generator workflow](./tests/assets/example_multi_queries_vector_retriever_workflow.json) (! need to configure LLM
   settings and ensure the Weaviate collection exists)
 - [Multi-query vector retrieval + prompt-store generator workflow](./tests/assets/example_multi_queries_vector_retriever_prompt_store_workflow.json) (!
@@ -244,7 +249,8 @@ Both filter components expect:
 - `filter_input`: query, response, or other text used for the keep/drop decision
 - `settings`: object validated by [`GuidelineContextFilterSettings`](./src/app/models/tools/guideline_context_filter.py)
 
-This component works on lists of `GuidelineReference` objects, not on `RetrievalResult`. That means it can also filter references that did not come from
+This component works on lists of `GuidelineReference` objects, not on `RetrievalResult`. That means it can also filter references that did not come
+from
 Weaviate or any retriever component.
 
 The service exposes two explicit operations, and the workflow system now mirrors them as two separate component variants:
@@ -275,14 +281,14 @@ Minimal settings shape:
   "minimum_score": 0.5,
   "keep_top_k": 4,
   "properties": [
-    {
-      "path": "content",
-      "label": "text"
-    },
-    {
-      "path": "heading_path",
-      "label": "section"
-    }
+	{
+	  "path": "content",
+	  "label": "text"
+	},
+	{
+	  "path": "heading_path",
+	  "label": "section"
+	}
   ]
 }
 ```
@@ -293,12 +299,12 @@ Minimal deduplication shape:
 {
   "kind": "deduplicate",
   "properties": [
-    {
-      "path": "content"
-    },
-    {
-      "path": "heading_path"
-    }
+	{
+	  "path": "content"
+	},
+	{
+	  "path": "heading_path"
+	}
   ],
   "deduplicate_keep_strategy": "highest_score",
   "score_field": "document_hierarchy.0.order"
@@ -319,6 +325,34 @@ It runs:
 - `filter/relevance_filter_references` with `method = "cross_encoder"`
 - `filter/relevance_filter_references` with `method = "llm"`
 - `generator`
+
+### Expander notes
+
+Both expander variants expect:
+
+- `references_key`: workflow key or template resolving to the input reference list
+- `settings`: object validated by either `NeighborhoodReferenceExpanderSettings` or `HierarchyReferenceExpanderSettings`
+
+Neighborhood expansion:
+
+- `type = "expander/neighborhood_references"`
+- uses the reference group plus guideline-local heading order from stored `GuidelineReference.document_hierarchy`
+- `context_window_size = 2` means two chunks before and two after when `direction = "both"`
+- `direction` can be `preceding`, `succeeding`, or `both`
+
+Hierarchy expansion:
+
+- `type = "expander/hierarchy_references"`
+- resolves the reference group from the input references, or from `settings.reference_group_id`
+- builds or loads a persisted hierarchy index from `REFERENCE_GROUP_HIERARCHY_INDEX_FOLDER`
+- `mode = "direct_parent"` expands to the immediate parent section
+- `mode = "levels_up"` with `levels_up = x` expands higher ancestors
+- `mode = "heading_level"` expands to the nearest ancestor at the configured heading level
+
+API endpoints:
+
+- `POST /guideline_references/groups/{reference_group_id}/hierarchy-index` builds or refreshes the persisted hierarchy index for one reference group
+- `POST /tools/guideline-expander` runs neighborhood- or hierarchy-based expansion directly on provided `GuidelineReference` items
 
 ### Prompt store workflow example
 

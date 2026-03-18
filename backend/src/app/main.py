@@ -11,6 +11,7 @@ from app.controllers import (
     auth_router,
     embedding_router,
     guideline_context_filter_router,
+    guideline_expander_router,
     keyword_router,
     llm_router,
     snomed_router,
@@ -55,6 +56,7 @@ main_app.include_router(weaviate_router, prefix="/vector/weaviate", tags=["Weavi
 main_app.include_router(keyword_router, prefix="/tools", tags=["Keywords"])
 main_app.include_router(llm_router, prefix="/tools", tags=["LLM"])
 main_app.include_router(guideline_context_filter_router, prefix="/tools", tags=["GuidelineContextFilter"])
+main_app.include_router(guideline_expander_router, prefix="/tools", tags=["GuidelineExpander"])
 main_app.include_router(snomed_router, prefix="/tools", tags=["SNOMED"])
 
 # Workflow system setup and interaction

@@ -317,6 +317,42 @@ class WeaviateVectorStoreService:
             mode=request.mode,
             hits=hits,
         )
+
+    def find_object_by_reference_id(self, collection_name: str, reference_id: str) -> Optional[WeaviateSearchHit]:
+        collection = self.get_collection(collection_name)
+        client_collection = self._get_client().collections.get(collection.name)
+        objects = self._fetch_objects_by_property(
+            client_collection,
+            property_name=WEAVIATE_PROP_REFERENCE_ID,
+            value=str(reference_id),
+            limit=1,
+        )
+        if not objects:
+            return None
+        obj = objects[0]
+        return WeaviateSearchHit(uuid=str(obj.uuid), properties=obj.properties or {})
+
+    def find_object_by_chunk_index(
+            self,
+            collection_name: str,
+            *,
+            guideline_id: str,
+            chunk_index: int,
+    ) -> Optional[WeaviateSearchHit]:
+        collection = self.get_collection(collection_name)
+        client_collection = self._get_client().collections.get(collection.name)
+        objects = self._fetch_objects_by_property(
+            client_collection,
+            property_name=WEAVIATE_PROP_CHUNK_INDEX,
+            value=int(chunk_index),
+            limit=100,
+        )
+        for obj in objects:
+            properties = obj.properties or {}
+            if str(properties.get(WEAVIATE_PROP_GUIDELINE_ID)) != str(guideline_id):
+                continue
+            return WeaviateSearchHit(uuid=str(obj.uuid), properties=properties)
+        return None
     
     def _build_named_vectors(
             self,
@@ -423,6 +459,19 @@ class WeaviateVectorStoreService:
         
         return client_collection.query.fetch_objects(
             filters=filters,
+        ).objects or []
+
+    @staticmethod
+    def _fetch_objects_by_property(client_collection, *, property_name: str, value: Any, limit: int = 10):
+        try:
+            from weaviate.collections.classes.filters import Filter
+            filters = Filter.by_property(property_name).equal(value)
+        except ImportError:
+            filters = SimpleNamespace(target=SimpleNamespace(value=value))
+
+        return client_collection.query.fetch_objects(
+            filters=filters,
+            limit=limit,
         ).objects or []
     
     @staticmethod

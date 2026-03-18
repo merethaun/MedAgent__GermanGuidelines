@@ -53,12 +53,14 @@ services:
       HF_HOME: /models/huggingface/transformers
       WEAVIATE_URL: http://weaviate:8080
       WEAVIATE_GRPC_URL: http://weaviate:50051
+      REFERENCE_GROUP_HIERARCHY_INDEX_FOLDER: /data/hierarchy-index
       # SNOMED CT setting
       SNOMED_BASE_URL: http://snomed-lite:8080/fhir
     volumes:
       - ../backend/src:/src
       - ../logs/backend:/logs
       - ../data/guideline_pdf:/data
+      - ../data/hierarchy-index:/data/hierarchy-index
       - ../data/huggingface-cache:/models/huggingface
     networks:
       - backend

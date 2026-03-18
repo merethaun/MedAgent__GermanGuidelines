@@ -22,7 +22,6 @@ from .weaviate_models import (
     WeaviateSearchResponse,
     WeaviateUpsertObjectRequest,
 )
-
 __all__ = [
     "CreateWeaviateCollectionRequest",
     "DeleteGuidelineResponse",

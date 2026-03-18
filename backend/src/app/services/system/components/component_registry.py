@@ -1,4 +1,5 @@
 from app.services.system.components import AbstractComponent
+from app.services.system.components.expander import AbstractExpander
 from app.services.system.components.filter import AbstractFilter
 from app.services.system.components.generator import LLMGenerator
 from app.services.system.components.query_transformer import AbstractQueryTransformer
@@ -12,6 +13,7 @@ AbstractComponent.variants = {
     
     # Tools
     "generator": LLMGenerator,
+    "expander": AbstractExpander,
     "filter": AbstractFilter,
     "query_transformer": AbstractQueryTransformer,
     "retriever": AbstractRetriever,
