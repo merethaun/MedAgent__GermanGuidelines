@@ -63,3 +63,20 @@ def test_query_transformation_service_merges_query_without_session_history():
     
     assert result.merged_query == "Appendizitis in der Schwangerschaft Diagnostik"
     assert "session_id" not in llm_service.calls[0]
+
+
+def test_query_transformation_service_augments_query_with_session():
+    llm_service = _FakeLLMInteractionService("Appendizitis Diagnostik\nAppendizitis Bildgebung")
+    service = QueryTransformationService(llm_service)
+
+    result = service.augment_query(
+        query="Wie wird Appendizitis diagnostiziert?",
+        system_prompt="Augment instructions",
+        prompt="QUESTION ...",
+        llm_settings=LLMSettings(model="gpt-test"),
+        session_id="augment-session",
+    )
+
+    assert result.full_response == "Appendizitis Diagnostik\nAppendizitis Bildgebung"
+    assert result.session_id == "augment-session"
+    assert llm_service.calls[0]["session_id"] == "augment-session"

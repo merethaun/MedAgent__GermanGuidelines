@@ -4,11 +4,17 @@ import app.services.system.components.component_registry  # noqa: F401
 from app.models.system.system_chat_interaction import Chat, ChatInteraction
 from app.services.system.components.query_transformer.hyde_query_transformer import HyDEQueryTransformer
 from app.services.system.components.query_transformer.keyword_transformer import KeywordQueryTransformer
+from app.services.system.components.query_transformer.query_augmenter import QueryAugmenterTransformer
 from app.services.system.components.query_transformer.query_context_merger import QueryContextMergerTransformer
 from app.services.system.components.query_transformer.query_rewriter import QueryRewriteTransformer
 from app.services.system.components.structure.start_component import StartComponent
 from app.services.system.prompt_store import get_prompt_definition, list_prompt_templates
-from app.services.tools.query_transformation_service import HyDEQueryResult, QueryMergeResult, QueryRewriteResult
+from app.services.tools.query_transformation_service import (
+    HyDEQueryResult,
+    QueryAugmentationResult,
+    QueryMergeResult,
+    QueryRewriteResult,
+)
 from app.utils.system.resolve_component_path import resolve_component_path
 
 
@@ -17,6 +23,7 @@ def test_resolve_component_path_for_query_transformers():
     assert resolve_component_path(["query_transformer", "keyword_extractor"]) is KeywordQueryTransformer
     assert resolve_component_path(["query_transformer", "hyde"]) is HyDEQueryTransformer
     assert resolve_component_path(["query_transformer", "query_context_merger"]) is QueryContextMergerTransformer
+    assert resolve_component_path(["query_transformer", "query_augmenter"]) is QueryAugmenterTransformer
 
 
 def test_prompt_store_exposes_hyde_prompt():
@@ -181,6 +188,52 @@ def test_hyde_transformer_uses_query_transformation_service(monkeypatch):
     assert data["hyde.primary_query"] == "Doc"
     assert "retrieval augmentation" in data["hyde.system_prompt"]
     assert 'QUESTION:\n"""Wie wird Appendizitis diagnostiziert?"""' in data["hyde.prompt"]
+
+
+def test_query_augmenter_decomposes_into_unique_subqueries(monkeypatch):
+    class FakeQueryTransformationService:
+        def augment_query(self, **kwargs):
+            assert kwargs["query"] == "Wie wird Appendizitis diagnostiziert und behandelt?"
+            return QueryAugmentationResult(
+                query=kwargs["query"],
+                system_prompt=kwargs["system_prompt"],
+                prompt=kwargs["prompt"],
+                full_response=(
+                    "Wie wird Appendizitis diagnostiziert?\n"
+                    "Wie wird Appendizitis behandelt?\n"
+                    "Wie wird Appendizitis diagnostiziert?"
+                ),
+                session_id=kwargs["session_id"],
+            )
+
+    monkeypatch.setattr(
+        "app.services.system.components.query_transformer.query_augmenter.get_query_transformation_service",
+        lambda: FakeQueryTransformationService(),
+    )
+
+    transformer = QueryAugmenterTransformer(
+        component_id="augment",
+        name="Query augmenter",
+        parameters={
+            "strategy": "decompose",
+            "include_original_query": False,
+            "llm_settings": {"model": "gpt-test"},
+        },
+        variant="query_augmenter",
+    )
+
+    data, next_component_id = transformer.execute(
+        {"start.current_user_input": "Wie wird Appendizitis diagnostiziert und behandelt?"},
+    )
+
+    assert next_component_id is None
+    assert data["augment.strategy"] == "decompose"
+    assert data["augment.subqueries"] == [
+        "Wie wird Appendizitis diagnostiziert?",
+        "Wie wird Appendizitis behandelt?",
+    ]
+    assert data["augment.primary_query"] == "Wie wird Appendizitis diagnostiziert?"
+    assert "STRATEGY: decompose" in data["augment.prompt"]
 
 
 def test_start_component_exposes_previous_interactions():

@@ -1,0 +1,170 @@
+{
+  "name": "Scope-Gated Query Decomposition Retrieval Flow",
+  "nodes": [
+    {
+      "component_id": "start",
+      "name": "Start node",
+      "type": "start",
+      "parameters": {}
+    },
+    {
+      "component_id": "scope",
+      "name": "Scope gate",
+      "type": "decision/is_within_scope",
+      "parameters": {
+        "query": "{start.current_user_input}",
+        "scope_description": "German AWMF guideline questions about oral and maxillofacial surgery.",
+        "allowed_examples": [
+          "Wie wird eine Kieferzyste behandelt?"
+        ],
+        "disallowed_examples": [
+          "Wie wird Asthma behandelt?"
+        ],
+        "llm_settings": {
+          "model": "gpt-4.1-mini",
+          "api_key": "TODO",
+          "base_url": "https://api.openai.com/v1",
+          "max_tokens": 80,
+          "timeout_s": 60
+        }
+      }
+    },
+    {
+      "component_id": "branch",
+      "name": "Branch on scope",
+      "type": "decider",
+      "parameters": {
+        "decision": "{scope.value}",
+        "cases": {
+          "true": "query_aug",
+          "false": "out_of_scope_generator"
+        }
+      }
+    },
+    {
+      "component_id": "query_aug",
+      "name": "Query decomposition",
+      "type": "query_transformer/query_augmenter",
+      "parameters": {
+        "strategy": "decompose",
+        "min_queries": 2,
+        "max_queries": 4,
+        "query": "{start.current_user_input}",
+        "llm_settings": {
+          "model": "gpt-4.1-mini",
+          "api_key": "TODO",
+          "base_url": "https://api.openai.com/v1",
+          "max_tokens": 256,
+          "timeout_s": 60
+        }
+      }
+    },
+    {
+      "component_id": "retrieve_each",
+      "name": "Retrieve for each subquery",
+      "type": "list",
+      "parameters": {
+        "list": "{query_aug.subqueries}",
+        "component_template": {
+          "component_id": "single_retriever",
+          "name": "Single retriever",
+          "type": "retriever/vector_retriever",
+          "parameters": {
+            "query": "<list_value>",
+            "settings": {
+              "weaviate_collection": "OpenSource_StructuredGuidelineFixedCharacters500_RefSpec",
+              "vector_name": "text",
+              "limit": 5
+            }
+          }
+        }
+      }
+    },
+    {
+      "component_id": "merge",
+      "name": "Merge retrieval results",
+      "type": "merge",
+      "parameters": {
+        "items": "{retrieve_each.component_outputs}",
+        "item_key": "references",
+        "latency_key": "latency",
+        "limit": 8
+      }
+    },
+    {
+      "component_id": "generator",
+      "name": "Generator with subquery provenance",
+      "type": "generator",
+      "parameters": {
+        "prompt_key": "awmf_clinical_qa_with_subqueries_v1",
+        "system_prompt_key": "awmf_clinical_qa_with_subqueries_v1",
+        "llm_settings": {
+          "model": "gpt-4o-mini",
+          "api_key": "TODO",
+          "base_url": "https://api.openai.com/v1",
+          "max_tokens": 512,
+          "timeout_s": 60
+        }
+      }
+    },
+    {
+      "component_id": "out_of_scope_generator",
+      "name": "Out of scope response",
+      "type": "generator",
+      "parameters": {
+        "prompt": "Explain briefly and politely that this workflow only handles oral and maxillofacial AWMF guideline questions. User query: {start.current_user_input}",
+        "llm_settings": {
+          "model": "gpt-4o-mini",
+          "api_key": "TODO",
+          "base_url": "https://api.openai.com/v1",
+          "max_tokens": 128,
+          "timeout_s": 60
+        }
+      }
+    },
+    {
+      "component_id": "end",
+      "name": "End node",
+      "type": "end",
+      "parameters": {
+        "generation_key": "{\ntry:\n    return generator.response\nexcept NameError:\n    return out_of_scope_generator.response\n}",
+        "retrieval_key": "{\ntry:\n    return merge.references\nexcept NameError:\n    return []\n}",
+        "retrieval_latency_key": "{\ntry:\n    return merge.latency\nexcept NameError:\n    return 0.0\n}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "start",
+      "target": "scope"
+    },
+    {
+      "source": "scope",
+      "target": "branch"
+    },
+    {
+      "source": "branch",
+      "target": "query_aug"
+    },
+    {
+      "source": "query_aug",
+      "target": "retrieve_each"
+    },
+    {
+      "source": "retrieve_each",
+      "target": "merge"
+    },
+    {
+      "source": "merge",
+      "target": "generator"
+    },
+    {
+      "source": "generator",
+      "target": "end"
+    },
+    {
+      "source": "out_of_scope_generator",
+      "target": "end"
+    }
+  ]
+}

@@ -36,6 +36,15 @@ class QueryMergeResult:
     merged_query: str
 
 
+@dataclass
+class QueryAugmentationResult:
+    query: str
+    system_prompt: str
+    prompt: str
+    full_response: str
+    session_id: str
+
+
 class QueryTransformationService:
     def __init__(self, llm_interaction_service: LLMInteractionService):
         self.llm_interaction_service = llm_interaction_service
@@ -115,6 +124,29 @@ class QueryTransformationService:
             prompt=prompt,
             full_response=full_response,
             merged_query=merged_query,
+        )
+
+    def augment_query(
+            self,
+            *,
+            query: str,
+            system_prompt: str,
+            prompt: str,
+            llm_settings: LLMSettings,
+            session_id: str,
+    ) -> QueryAugmentationResult:
+        full_response = self.llm_interaction_service.generate_text(
+            llm_settings=llm_settings,
+            prompt=prompt,
+            system_prompt=system_prompt,
+            session_id=session_id,
+        )
+        return QueryAugmentationResult(
+            query=query,
+            system_prompt=system_prompt,
+            prompt=prompt,
+            full_response=full_response,
+            session_id=session_id,
         )
     
     @staticmethod
