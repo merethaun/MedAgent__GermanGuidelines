@@ -221,9 +221,8 @@ class GuidelineReferenceChunkingServiceTest(unittest.TestCase):
         
         created_references = self.reference_service.list_references(reference_group_id=result.target_reference_group_id)
         created_references = sorted(
-            created_references, key=lambda reference: tuple(
-                entry.order for entry in reference.document_hierarchy,
-            ),
+            created_references,
+            key=lambda reference: tuple(entry.order for entry in reference.document_hierarchy),
         )
         created_group = self.reference_service.get_reference_group_by_id(result.target_reference_group_id)
         self.assertEqual(result.chunked_text_reference_count, 1)
@@ -261,9 +260,8 @@ class GuidelineReferenceChunkingServiceTest(unittest.TestCase):
         
         created_references = self.reference_service.list_references(reference_group_id=result.target_reference_group_id)
         created_references = sorted(
-            created_references, key=lambda reference: tuple(
-                entry.order for entry in reference.document_hierarchy,
-            ),
+            created_references,
+            key=lambda reference: tuple(entry.order for entry in reference.document_hierarchy),
         )
         created_texts = [reference.contained_text for reference in created_references if reference.type == ReferenceType.TEXT]
         self.assertEqual(
@@ -303,9 +301,8 @@ class GuidelineReferenceChunkingServiceTest(unittest.TestCase):
             reference for reference in target_references if reference.guideline_id == self.guideline_id
         ]
         updated_guideline_references = sorted(
-            updated_guideline_references, key=lambda reference: tuple(
-                entry.order for entry in reference.document_hierarchy,
-            ),
+            updated_guideline_references,
+            key=lambda reference: tuple(entry.order for entry in reference.document_hierarchy),
         )
         untouched_guideline_references = [
             reference for reference in target_references if reference.guideline_id == self.other_guideline_id
