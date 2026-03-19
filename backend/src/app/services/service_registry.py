@@ -18,6 +18,7 @@ from .knowledge.guideline import (
     GuidelineService,
     ReferenceHierarchyIndexService,
 )
+from .knowledge.graph import Neo4jGraphService
 from .knowledge.vector import EmbeddingService, WeaviateVectorStoreService
 from .system import WorkflowSystemInteractionService, WorkflowSystemStorageService
 from .system.chat import ChatService
@@ -34,6 +35,7 @@ _guideline_reference_keyword_service: Optional[GuidelineReferenceKeywordService]
 _reference_hierarchy_index_service: Optional[ReferenceHierarchyIndexService] = None
 _embedding_service: Optional[EmbeddingService] = None
 _weaviate_vector_store_service: Optional[WeaviateVectorStoreService] = None
+_graph_service: Optional[Neo4jGraphService] = None
 
 _keyword_service: Optional[KeywordService] = None
 _snomed_service: Optional[SnomedService] = None
@@ -245,6 +247,21 @@ def get_weaviate_vector_store_service() -> WeaviateVectorStoreService:
         init_services()
     assert _weaviate_vector_store_service is not None
     return _weaviate_vector_store_service
+
+
+def get_graph_service() -> Neo4jGraphService:
+    global _graph_service
+    if _graph_service is None:
+        init_services()
+        assert _guideline_service is not None
+        assert _guideline_reference_service is not None
+        _graph_service = Neo4jGraphService(
+            guideline_service=_guideline_service,
+            guideline_reference_service=_guideline_reference_service,
+            embedding_service=_embedding_service,
+        )
+    assert _graph_service is not None
+    return _graph_service
 
 
 def get_llm_interaction_service() -> LLMInteractionService:

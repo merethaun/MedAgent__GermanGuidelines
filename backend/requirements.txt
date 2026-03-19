@@ -14,6 +14,7 @@ cryptography>=41
 
 # For MongoDB / BSON ObjectIds
 pymongo # src/app/models/** and tests/** import ObjectId via bson from pymongo
+neo4j # Neo4j graph database driver
 
 # For keyword extraction tools
 yake # keyword

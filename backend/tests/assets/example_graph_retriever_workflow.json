@@ -1,0 +1,93 @@
+{
+  "name": "Vector Seeds + Graph Expansion + Generator",
+  "nodes": [
+    {
+      "component_id": "start",
+      "name": "Start node",
+      "type": "start",
+      "parameters": {}
+    },
+    {
+      "component_id": "seed_retriever",
+      "name": "Guideline vector seed retriever",
+      "type": "retriever/vector_retriever",
+      "parameters": {
+        "query": "{start.current_user_input}",
+        "settings": {
+          "weaviate_collection": "OpenSource_StructuredGuidelineFixedCharacters500_RefSpec",
+          "vector_name": "text",
+          "limit": 4,
+          "mode": "vector",
+          "content_property": "text",
+          "reference_id_property": "reference_id",
+          "source_id_property": "guideline_id"
+        }
+      }
+    },
+    {
+      "component_id": "graph_expand",
+      "name": "Guideline graph expander",
+      "type": "expander/graph_references",
+      "parameters": {
+        "references_key": "seed_retriever.references",
+        "settings": {
+          "graph_name": "guideline_graph_v1",
+          "limit": 6,
+          "include_seed_references": true,
+          "neighbor_depth": 1,
+          "include_section_references": true,
+          "section_max_children": 12,
+          "include_keyword_matches": false,
+          "keyword_overlap_min": 2,
+          "keyword_overlap_ratio_min": 0.8,
+          "include_similarity_matches": true,
+          "similarity_threshold": 0.5
+        }
+      }
+    },
+    {
+      "component_id": "generator",
+      "name": "OpenAI Generator",
+      "type": "generator",
+      "parameters": {
+        "prompt_key": "awmf_clinical_qa_html_v1",
+        "prompt": "{\ncontexts = []\nfor i, ref in enumerate(graph_expand.references):\n    section = ' / '.join([entry.title for entry in (ref.document_hierarchy or []) if entry.title])\n    graph_hit = graph_expand.graph_hits[i] if i < len(graph_expand.graph_hits) else {}\n    reasons = '; '.join([reason.get('detail') or reason.get('kind', '') for reason in graph_hit.get('reasons', [])]) or 'seed match'\n    text = ref.extract_content() or ''\n    contexts.append(f'''<context_item id=\"{i}\" section=\"{section}\" graph_reason=\"{reasons}\">\\n{text}\\n</context_item>''')\nreturn f'''<context>{chr(10).join(contexts)}</context>\\n<question>{start.current_user_input}</question>'''\n}",
+        "llm_settings": {
+          "model": "gpt-4o-mini",
+          "api_key": "TODO",
+          "base_url": "https://api.openai.com/v1",
+          "max_tokens": 512,
+          "timeout_s": 60
+        }
+      }
+    },
+    {
+      "component_id": "end",
+      "name": "End node",
+      "type": "end",
+      "parameters": {
+        "generation_key": "{generator.response}",
+        "retrieval_key": "{graph_expand.references}",
+        "retrieval_latency_key": "{seed_retriever.latency + graph_expand.latency}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "start",
+      "target": "seed_retriever"
+    },
+    {
+      "source": "seed_retriever",
+      "target": "graph_expand"
+    },
+    {
+      "source": "graph_expand",
+      "target": "generator"
+    },
+    {
+      "source": "generator",
+      "target": "end"
+    }
+  ]
+}

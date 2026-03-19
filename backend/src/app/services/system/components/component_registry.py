@@ -1,6 +1,6 @@
 from app.services.system.components import AbstractComponent
+from app.services.system.components.context_expander import AbstractExpander
 from app.services.system.components.decision import AbstractDecisionComponent
-from app.services.system.components.expander import AbstractExpander
 from app.services.system.components.filter import AbstractFilter
 from app.services.system.components.generator import LLMGenerator
 from app.services.system.components.query_transformer import AbstractQueryTransformer

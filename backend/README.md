@@ -165,14 +165,16 @@ The currently available component variants are:
 | `start`                                    | [`StartComponent`](./src/app/services/system/components/structure/start_component.py)                             | Required as start to provide user input                                                                                                                                                                                                   |
 | `end`                                      | [`EndComponent`](./src/app/services/system/components/structure/end_component.py)                                 | Required as end to define generator output (text) and retrieval result (references)                                                                                                                                                       |
 | `generator`                                | [`LLMGenerator`](./src/app/services/system/components/generator/generator.py)                                     | Executes the actual text generation step by sending a resolved prompt to the configured LLM and returning the model response. The LLM is configured via [`LLMSettings`](./src/app/models/tools/llm_interaction.py).                       |
-| `expander/neighborhood_references`         | [`NeighborhoodReferencesExpander`](./src/app/services/system/components/expander/reference_expander.py)           | Expands references to surrounding items inside the same guideline and reference group, using the stored guideline-reference heading order. Supports symmetric, preceding-only, or succeeding-only context windows.                        |
-| `expander/hierarchy_references`            | [`HierarchyReferencesExpander`](./src/app/services/system/components/expander/reference_expander.py)              | Expands filtered references to a larger hierarchy section based on the selected reference group. The hierarchy index is persisted as JSON so later runs can reuse it.                                                                     |
+| `expander/neighborhood_references`         | [`NeighborhoodReferencesExpander`](./src/app/services/system/components/context_expander/reference_expander.py)   | Expands references to surrounding items inside the same guideline and reference group, using the stored guideline-reference heading order. Supports symmetric, preceding-only, or succeeding-only context windows.                        |
+| `expander/hierarchy_references`            | [`HierarchyReferencesExpander`](./src/app/services/system/components/context_expander/reference_expander.py)      | Expands filtered references to a larger hierarchy section based on the selected reference group. The hierarchy index is persisted as JSON so later runs can reuse it.                                                                     |
+| `expander/graph_references`                | [`GraphReferencesExpander`](./src/app/services/system/components/context_expander/reference_expander.py)          | Takes an existing seed list of guideline references and expands it through the Neo4j graph via neighbors, shared sections, and shared keywords, while still returning plain guideline references.                                         |
 | `filter/deduplicate_references`            | [`DeduplicateReferencesFilter`](./src/app/services/system/components/filter/guideline_context_filter.py)          | Deduplicates a list of guideline references based on configured properties such as `content` and `heading_path`.                                                                                                                          |
 | `filter/relevance_filter_references`       | [`RelevanceFilterReferences`](./src/app/services/system/components/filter/guideline_context_filter.py)            | Relevance-based filtering for guideline references. It can use numeric fields, a cross-encoder, or an LLM judge, and can combine multiple properties into one filter input.                                                               |
 | `query_transformer/query_context_merger`   | [`QueryContextMergerTransformer`](./src/app/services/system/components/query_transformer/query_context_merger.py) | Builds one standalone query from the current user input plus the last `x` chat turns. It only considers prior user inputs and final generator outputs, so it works as a lightweight workflow-level context provider without tool routing. |
 | `query_transformer/rewrite`                | [`QueryRewriteTransformer`](./src/app/services/system/components/query_transformer/query_rewriter.py)             | LLM-based query rewriting. Use `rewrite_instructions` to define the rewrite behavior, for example a clean-query rewrite that only fixes misspellings and spacing.                                                                         |
 | `query_transformer/keyword_extractor`      | [`KeywordQueryTransformer`](./src/app/services/system/components/query_transformer/keyword_transformer.py)        | Extracts query keywords with either `yake` or `llm`, and can optionally expand them with SNOMED synonyms.                                                                                                                                 |
 | `query_transformer/hyde`                   | [`HyDEQueryTransformer`](./src/app/services/system/components/query_transformer/hyde_query_transformer.py)        | Generates hypothetical retrieval documents from the query. The default HyDE prompt is available from the prompt store via `hyde_awmf_query_transform_v1`.                                                                                 |
+| `retriever/graph_retriever`                | [`GraphRetriever`](./src/app/services/system/components/retriever/graph_retriever.py)                             | Convenience variant for Neo4j graph retrieval that discovers seeds internally. It is available, but for Graph-RAG workflows the preferred pattern is `retriever/...` for seed generation followed by `expander/graph_references`.         |
 | `retriever/vector_retriever`               | [`VectorRetriever`](./src/app/services/system/components/retriever/vector_retriever.py)                           | Queries a Weaviate collection during workflow execution and returns workflow-native retrieval references. Search settings are validated through [`VectorRetrieverSettings`](./src/app/models/system/workflow_retriever.py).               |
 | `retriever/multi_queries_vector_retriever` | [`MultiQueriesVectorRetriever`](./src/app/services/system/components/retriever/vector_retriever.py)               | Executes multiple weighted Weaviate searches, merges duplicate hits, and returns the combined retrieval references. Settings are validated through [`MultiQueryVectorRetrieverSettings`](./src/app/models/system/workflow_retriever.py).  |
 
@@ -202,6 +204,8 @@ Create a workflow by posting a JSON object to POST `<backend>/system/workflow` t
   after a context-merging step, without synonyms, and HyDE)
 - [Vector retrieval + generator workflow](./tests/assets/example_vector_retriever_workflow.json) (! need to configure LLM settings and ensure the
   Weaviate collection exists)
+- [Vector seeds + graph expansion + generator workflow](./tests/assets/example_graph_retriever_workflow.json) (! need to configure LLM settings, sync
+  a Neo4j graph first, and provide seed references through the preceding retriever)
 - [Vector retrieval + guideline context filter + generator workflow](./tests/assets/example_guideline_context_filter_workflow.json) (! need to
   configure LLM settings and ensure the Weaviate collection exists)
 - [Vector retrieval + deduplicate + cross-encoder relevance + LLM relevance + generator workflow](./tests/assets/example_guideline_context_filter_all_in_one_workflow.json) (!
@@ -216,16 +220,21 @@ Create a workflow by posting a JSON object to POST `<backend>/system/workflow` t
 
 ### Retriever component notes
 
-The workflow retriever abstraction now exposes one primary output:
+Shared outputs:
 
 - `component_id.references`: list of retrieval references compatible with `RetrievalResult`
 
-The vector retriever additionally stores `component_id.latency`, so the `end` component can forward retrieval latency via `retrieval_latency_key`.
+Most retrievers also expose:
 
-`retriever/vector_retriever` expects:
+- `component_id.latency`: elapsed retrieval time in seconds
 
-- `query`: template resolved against workflow data
-- `settings`: object validated by `VectorRetrieverSettings`
+Variant guidance:
+
+`retriever/vector_retriever`
+
+- Use this as the default seed retriever when one query and one vector space are enough.
+- Required parameters: `query` plus `settings`.
+- Main retrieval controls live in `settings`: `vector_name`, `mode`, `keyword_properties`, `alpha`, `minimum_score`, and `limit`.
 
 Minimal settings shape:
 
@@ -241,79 +250,105 @@ Minimal settings shape:
 }
 ```
 
+`retriever/multi_queries_vector_retriever`
+
+- Use this when seed retrieval should combine several retrieval views, for example text plus heading vectors, or vector plus hybrid sub-queries.
+- The top-level component `query` is not used here; each entry in `settings.queries` carries its own resolved query.
+- Extra output: `component_id.queries`, which records the resolved query/vector combinations used during execution.
+- `settings`: object validated by `MultiQueryVectorRetrieverSettings`
+- `settings.queries`: list of weighted query definitions, each with `query`, `vector_name`, and optional hybrid-search knobs
+
+`retriever/graph_retriever`
+
+- This is a convenience query-to-graph retriever for Neo4j.
+- Extra output: `component_id.graph_hits`, which explains the graph ranking.
+- It is available, but for Graph-RAG workflows the preferred pattern is still explicit seed generation followed by graph expansion.
+
+Preferred Graph-RAG pattern:
+
+1. use `retriever/vector_retriever` or `retriever/multi_queries_vector_retriever` to create the seed set
+2. pass those seed references into `expander/graph_references`
+3. optionally apply `filter/deduplicate_references` and/or `filter/relevance_filter_references`
+4. generate from the expanded set
+
+That keeps the graph stage explicit: seed references in, expanded references out.
+
+## Neo4j guideline graph
+
+The backend now supports a lightweight Neo4j graph for guideline retrieval. The graph is intentionally brief and document-centric:
+
+- `Guideline` nodes hold guideline-level metadata
+- `Section` nodes capture the heading hierarchy
+- `Reference` nodes point back to the original MongoDB guideline references
+- `Keyword` nodes link normalized `associated_keywords`
+
+Typical relations are `IN_GUIDELINE`, `PART_OF`, `SUBSECTION_OF`, `NEXT` / `PREV`, `HAS_KEYWORD`, and `SIMILAR`.
+
+For inspection and visualization, Neo4j provides its own frontend, the Neo4j Browser. In the local Docker setup it is available at
+`http://localhost:7474`. Log in with the configured Neo4j credentials from [`docker/.env`](../docker/.env), by default `neo4j` plus the configured
+`NEO4J_PASSWORD`.
+
+The preferred workflow integration is `expander/graph_references`, which takes a seed set of `GuidelineReference` items and returns an expanded list
+of `GuidelineReference` items. This keeps the graph stage transparent and fits the intended "seed set first, graph expansion second" design better
+than an all-in-one graph retriever.
+
+Current graph expansion properties:
+
+- `include_seed_references`: keep the original seed references in the final output so the generator still sees the anchor evidence.
+- `neighbor_depth`: follow the `NEXT` / `PREV` chain around each seed. This is useful for immediately preceding or following chunks.
+- `include_section_references`: add references with section overlap, meaning they connect to the same `Section` node as a seed through `PART_OF`.
+- `section_max_children`: soft cap on how many same-section candidates are considered before final ranking when a section is large.
+- `include_keyword_matches`: add references connected through shared `Keyword` nodes.
+- `keyword_overlap_min`: absolute keyword-overlap shortcut. If at least this many normalized keywords overlap, the match is accepted directly.
+- `keyword_overlap_ratio_min`: normalized keyword-overlap threshold based on the smaller keyword set. This helps when one side has only a few keywords but those are fully or almost fully covered.
+- `include_similarity_matches`: add references connected through `SIMILAR` edges.
+- `similarity_threshold`: minimum similarity-edge score required before a semantic match is accepted.
+- `limit`: overall cap on the expanded result list.
+
+How to read the two most important non-trivial signals:
+
+- Section overlap: two references overlap by section when they are attached to the same heading section in the synced graph. In practice this means "same heading context", which is why it is usually the best expansion signal.
+- Keywords: keyword expansion uses normalized `associated_keywords` from the source references. Matching is not purely absolute anymore: the graph also checks normalized overlap against the smaller keyword set, so a candidate can still match when a small keyword list is fully covered. This increases recall, but it is still noisier than section overlap because keyword quality depends on extraction quality and may connect content across different guidelines.
+- Similarity: similarity expansion uses `SIMILAR` edges built during graph sync from dense embeddings over the reference text plus heading path. This is the strongest non-structural signal and is usually the best secondary expansion criterion after section overlap.
+
 ### Guideline context filter notes
 
-Both filter components expect:
+Shared inputs:
 
 - `references_key`: workflow key or template resolving to the retrieved references
 - `filter_input`: query, response, or other text used for the keep/drop decision
 - `settings`: object validated by [`GuidelineContextFilterSettings`](./src/app/models/tools/guideline_context_filter.py)
 
 This component works on lists of `GuidelineReference` objects, not on `RetrievalResult`. That means it can also filter references that did not come
-from
-Weaviate or any retriever component.
+from Weaviate or any retriever component.
 
 The service exposes two explicit operations, and the workflow system now mirrors them as two separate component variants:
 
 - `deduplicate_references(...)`
 - `relevance_filter_references(...)`
 
-Filtering behavior:
+Filtering conditions you can define:
 
-- `kind = "deduplicate"` removes duplicate retrieved context items based on the configured properties
-- `kind = "relevance"` applies one of the relevance methods below
-- `method = "score"` reuses an existing numeric field such as `weaviate_score`
-- `method = "cross_encoder"` scores each retrieved item against the filter input
-- `method = "llm"` asks an LLM to decide which items to keep
-- `minimum_score` can be used as a threshold on the calculated relevance score before `keep_top_k` is applied
-- `keep_top_k` is optional, so the same component can just reorder, just filter, or do both
+- `settings.kind`: `deduplicate` or `relevance`
+- `settings.method`: for relevance filtering choose `score`, `cross_encoder`, or `llm`
+- `settings.properties[].path`: choose which fields of each `GuidelineReference` are inspected, for example `content`, `heading_path`,
+  `associated_keywords`, `type`, `guideline_id`, or any dotted path inside the model
+- `settings.properties[].label`, `include_label`, `max_chars`: control how each selected field is serialized before relevance judging
+- `settings.joiner` and `include_empty_properties`: control how the selected fields are combined into one per-reference string
+- `settings.minimum_score`, `keep_top_k`, `sort_by_score`: define thresholding and final ordering
+- `settings.score_field`: numeric field used when `method = "score"`
+- `settings.deduplicate_keep_strategy`: choose whether duplicate groups keep the `highest_score` item or the `first`
+- `settings.llm_system_prompt`, `llm_batch_size`, and `llm_settings`: define the LLM-based judging behavior when `method = "llm"`
 
 To avoid a component explosion, the item input is defined through `settings.properties`. Each entry selects one property, for example `retrieval`,
 `content`, `heading_path`, or any dotted path inside the reference model. These selected properties are merged into one per-item string before
 cross-encoder or LLM judging.
 
-Minimal settings shape:
+Practical use after graph expansion:
 
-```json
-{
-  "kind": "relevance",
-  "method": "cross_encoder",
-  "minimum_score": 0.5,
-  "keep_top_k": 4,
-  "properties": [
-	{
-	  "path": "content",
-	  "label": "text"
-	},
-	{
-	  "path": "heading_path",
-	  "label": "section"
-	}
-  ]
-}
-```
-
-Minimal deduplication shape:
-
-```json
-{
-  "kind": "deduplicate",
-  "properties": [
-	{
-	  "path": "content"
-	},
-	{
-	  "path": "heading_path"
-	}
-  ],
-  "deduplicate_keep_strategy": "highest_score",
-  "score_field": "document_hierarchy.0.order"
-}
-```
-
-There is also a standalone tool endpoint:
-
-- `POST /tools/guideline-context-filter`
+- Deduplicate on `content` plus `heading_path` if section expansion can surface near-identical neighboring chunks.
+- Relevance-filter on `content` plus `heading_path` to keep graph context tied to the current question.
+- Add `associated_keywords` only if those keywords are curated well enough to help rather than add noise.
 
 It accepts guideline references directly, so the same filtering logic can be used without going through the workflow system.
 
@@ -328,10 +363,10 @@ It runs:
 
 ### Expander notes
 
-Both expander variants expect:
+All expander variants expect:
 
 - `references_key`: workflow key or template resolving to the input reference list
-- `settings`: object validated by either `NeighborhoodReferenceExpanderSettings` or `HierarchyReferenceExpanderSettings`
+- `settings`: object validated by the variant-specific settings model
 
 Neighborhood expansion:
 
@@ -348,6 +383,77 @@ Hierarchy expansion:
 - `mode = "direct_parent"` expands to the immediate parent section
 - `mode = "levels_up"` with `levels_up = x` expands higher ancestors
 - `mode = "heading_level"` expands to the nearest ancestor at the configured heading level
+
+Graph seed expansion:
+
+- `type = "expander/graph_references"`
+- takes the provided seed references as the graph entry points
+- returns `component_id.references`, `component_id.added_references`, and `component_id.graph_hits`
+
+Implemented expansion / filtering controls:
+
+- `include_seed_references`: keep or drop the original seeds from the final output
+- `neighbor_depth`: include immediate `NEXT` / `PREV` neighbors up to the configured hop distance
+- `include_section_references`: include references that share a section with at least one seed
+- `section_max_children`: soft cap on how many same-section candidates are considered before final ranking
+- `include_keyword_matches`: include references connected through shared normalized keywords
+- `keyword_overlap_min`: absolute keyword-overlap shortcut
+- `keyword_overlap_ratio_min`: normalized keyword-overlap threshold based on the smaller keyword set, with a small shared-keyword floor so tiny one-keyword matches do not dominate
+- `include_similarity_matches`: include references connected through `SIMILAR` edges
+- `similarity_threshold`: require at least this similarity score before similarity-based expansion is allowed
+- `limit`: global cap on the final expanded result size
+
+Recommended starting profile:
+
+```json
+{
+  "graph_name": "guideline_graph_v1",
+  "limit": 8,
+  "include_seed_references": true,
+  "neighbor_depth": 1,
+  "include_section_references": true,
+  "section_max_children": 12,
+  "include_keyword_matches": false,
+  "keyword_overlap_min": 2,
+  "keyword_overlap_ratio_min": 0.8,
+  "include_similarity_matches": true,
+  "similarity_threshold": 0.5
+}
+```
+
+If keyword links are high quality and you want broader recall, turn `include_keyword_matches` on and start with `keyword_overlap_min = 2` plus `keyword_overlap_ratio_min = 0.8`.
+
+Which expansion criteria make the most sense in practice:
+
+- Strongest default signal: same section as the seed. In guideline documents this usually preserves the most meaningful local context.
+- Strongest secondary signal: similarity edges with a threshold around `0.5-0.7`. They usually capture semantically related references better than plain keywords.
+- Also useful: immediate neighbors with a small window, usually `neighbor_depth = 1` and sometimes `2`. This works well when references were chunked
+  sequentially.
+- Useful but more selective now: shared keywords. This should still usually be treated as a supplementary signal, not the only one, because keyword
+  quality depends on extraction quality and may connect across guidelines. The normalized overlap check mainly helps when one side has only a few but
+  highly relevant keywords.
+- Usually best to keep: `include_seed_references = true`, so the generator still sees the original anchor evidence.
+- Usually best to constrain: moderate `limit` such as `6-12`, and moderate `section_max_children`, so one broad section does not dominate the result.
+
+Useful filtering directly after graph expansion:
+
+- deduplicate on `content` and `heading_path` when section and neighbor expansion can surface overlapping chunks
+- relevance-filter on `content` and `heading_path` to remove graph-adjacent but question-irrelevant references
+- if keyword expansion is enabled, consider adding `associated_keywords` to the relevance filter input, but only when those keywords are trustworthy
+- if similarity expansion is enabled, it often still helps to relevance-filter afterwards because semantic neighbors can be topically close while still
+  being too broad for the current question
+
+Criteria that are usually less sensible unless you have a strong reason:
+
+- Large neighbor windows. They tend to reintroduce the same context bloat as naive Small2Big expansion.
+- Keyword-only expansion with low thresholds. This can become noisy quickly, especially across multiple guidelines.
+- Very large section fan-out. It reduces transparency and often dilutes the seed evidence.
+
+Criteria that would also make sense as future extensions, but are not implemented yet:
+
+- restricting expansion to certain reference types such as `recommendation` or `statement`
+- a same-guideline-only vs. cross-guideline toggle for keyword expansion
+- a minimum shared-keyword ratio relative to the seed keyword set, which is often better than a pure absolute count
 
 API endpoints:
 
@@ -481,36 +587,6 @@ Example:
 
 Here, `prompt_key` contributes the reusable AWMF system prompt, while `prompt` is defined in the workflow and can map whatever retrieval structure
 that workflow exposes.
-
-`retriever/multi_queries_vector_retriever` expects:
-
-- `settings`: object validated by `MultiQueryVectorRetrieverSettings`
-- `settings.queries`: list of weighted query definitions, each with `query`, `vector_name`, and optional hybrid-search knobs
-
-Minimal settings shape:
-
-```json
-{
-  "weaviate_collection": "OpenSource_StructuredGuidelineFixedCharacters500_RefSpec",
-  "limit": 5,
-  "per_query_limit": 8,
-  "queries": [
-	{
-	  "query": "{start.current_user_input}",
-	  "vector_name": "text",
-	  "weight": 1.0
-	},
-	{
-	  "query": "{start.current_user_input}",
-	  "vector_name": "headers",
-	  "weight": 0.4
-	}
-  ],
-  "content_property": "text",
-  "reference_id_property": "reference_id",
-  "source_id_property": "guideline_id"
-}
-```
 
 ---
 

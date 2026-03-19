@@ -10,6 +10,7 @@ import app.services.system.components.component_registry
 from app.controllers import (
     auth_router,
     embedding_router,
+    graph_router,
     guideline_context_filter_router,
     guideline_expander_router,
     keyword_router,
@@ -49,6 +50,7 @@ main_app.include_router(auth_router, prefix="/auth", tags=["Auth"])
 # Knowledge setup
 main_app.include_router(guideline_router, prefix="/guidelines", tags=["Guidelines"])
 main_app.include_router(guideline_reference_router, prefix="/guideline_references", tags=["GuidelineReferences"])
+main_app.include_router(graph_router, prefix="/graph/neo4j", tags=["Neo4jGraph"])
 main_app.include_router(embedding_router, prefix="/vector/embeddings", tags=["VectorEmbeddings"])
 main_app.include_router(weaviate_router, prefix="/vector/weaviate", tags=["WeaviateVectorStore"])
 

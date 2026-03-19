@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.constants.auth_config import ROLE_ADMIN, ROLE_USER
 from app.controllers.dependencies.auth_dependencies import require_roles
+from app.exceptions.knowledge.graph import GraphNotFoundError
 from app.exceptions.system.chat import ChatNotFoundError
 from app.models.system.system_chat_interaction import Chat, RenameChatRequest
 from app.models.system.workflow_system import WorkflowConfig
@@ -303,6 +304,8 @@ def pose_question(
 ) -> Chat:
     try:
         return chat_service.pose_question(chat_id, user_input)
+    except GraphNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
