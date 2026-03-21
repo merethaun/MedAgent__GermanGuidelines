@@ -71,6 +71,14 @@ class RenameChatRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
 
 
+class PoseQuestionRequest(BaseModel):
+    user_input: str = Field(..., min_length=1, description="User input / question")
+    runtime_llm_settings: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional per-request LLM settings override used during workflow execution.",
+    )
+
+
 class ChatInteraction(BaseModel):
     user_input: str
     time_question_input: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

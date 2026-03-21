@@ -66,20 +66,116 @@ The backend container supports two run modes via `MODE`:
 
 Open Keycloak Admin UI at `http://localhost:8080/admin` and log in with `KEYCLOAK_ADMIN_USER` and `KEYCLOAK_ADMIN_PASSWORD`.
 
-Recommended baseline setup:
+The local setup expects one realm and two clients:
 
-1. create or select the `medagent` realm
-2. ensure the roles `admin` and `study_user` exist
-3. create the frontend client `medagent-frontend` as a public OpenID Connect client with PKCE
-4. configure it for `http://localhost:5173`
+1. realm: `medagent`
+2. browser client: `medagent-frontend`
+3. backend helper client: `medagent-backend`
 
-Useful frontend client values:
+### 1. Create the realm
 
+- Realm name: `medagent`
+
+This realm name must match:
+
+- `VITE_KEYCLOAK_REALM=medagent` in the frontend container
+- `KEYCLOAK_REALM=medagent` in the backend container
+- `OIDC_ISSUER=http://keycloak:8080/realms/medagent` in backend and evaluation
+
+### 2. Create the realm roles
+
+Create these realm roles in `Realm roles`:
+
+- `admin`: full backend and evaluation access
+- `study_user`: normal app usage
+- `evaluator`: manual review and evaluation-task access
+
+Use realm roles here, not client roles. The backend and evaluation services read roles from the token's `realm_access.roles`.
+
+### 3. Create the clients
+
+#### Frontend client: `medagent-frontend`
+
+This is the browser SPA client used by the React frontend.
+
+Recommended values:
+
+- Client ID: `medagent-frontend`
+- Client type: `OpenID Connect`
+- Client authentication: `Off`
+- Standard flow: `On`
+- Direct access grants: `Off`
+- Service accounts roles: `Off`
 - Root URL: `http://localhost:5173`
 - Home URL: `http://localhost:5173`
 - Valid redirect URIs: `http://localhost:5173/*`
 - Valid post logout redirect URIs: `http://localhost:5173/*`
 - Web origins: `http://localhost:5173`
+
+This must match `VITE_KEYCLOAK_CLIENT_ID=medagent-frontend` in `docker/docker-compose.yml`.
+
+#### Backend client: `medagent-backend`
+
+This client is not used as a browser app. It is mainly referenced by backend configuration and by the backend `/auth/token` helper, which requests a token via password grant for development/testing.
+
+Recommended values:
+
+- Client ID: `medagent-backend`
+- Client type: `OpenID Connect`
+- Client authentication: `Off`
+- Standard flow: `Off`
+- Direct access grants: `On`
+- Service accounts roles: `Off`
+- Root URL: leave empty
+- Home URL: leave empty
+- Valid redirect URIs: leave empty
+- Valid post logout redirect URIs: leave empty
+- Web origins: leave empty
+
+The `http://localhost:3000` Root URL sometimes seen on this client is not needed for this repository. It looks like a stale leftover from another frontend setup and can be removed.
+
+This client ID must match `KEYCLOAK_CLIENT_ID=medagent-backend` in `docker/docker-compose.yml`.
+
+#### Evaluation access model
+
+The evaluation frontend and backend now reuse the logged-in user's bearer token when the evaluation service calls the backend. That means there is no separate `medagent-evaluation` service-account client to configure for normal evaluation runs.
+
+What this means in practice:
+
+- if a user opens `/admin/evaluation`, their Keycloak login must already have the backend permissions needed for the actions triggered there
+- for evaluation administration, assigning the realm role `admin` is the simplest setup because backend workflow access, guideline lookup, embeddings, and related tools are admin-protected
+- for manual review only, `evaluator` is enough for `/evaluation/tasks`, but those users cannot create admin evaluation runs unless they also have `admin`
+
+Because the evaluation worker is asynchronous, it temporarily stores the creator's access token with the queued run and removes it again once the run reaches a final state. A long-running run can still fail if that user token expires before processing finishes.
+
+### 4. Add users and assign roles
+
+To create a user:
+
+1. open `Users`
+2. create the user
+3. set a password in `Credentials`
+4. open `Role mapping`
+5. assign one or more realm roles
+
+Typical user role assignments:
+
+- normal app user: `study_user`
+- evaluator: `study_user` and `evaluator`
+- administrator: `admin`
+
+If you want to add an evaluator specifically, assign both `study_user` and `evaluator`. `study_user` allows normal app usage, while `evaluator` unlocks the evaluation review pages.
+
+### 5. Values That Must Match
+
+These values need to be filled in consistently between Keycloak and your Docker env file:
+
+- realm name: `medagent`
+- frontend client ID: `medagent-frontend`
+- backend client ID: `medagent-backend`
+- Keycloak admin username: set `KEYCLOAK_ADMIN_USER`
+- Keycloak admin password: set `KEYCLOAK_ADMIN_PASSWORD`
+- Keycloak database password: set `KEYCLOAK_DB_PASSWORD`
 
 ## Persistence
 

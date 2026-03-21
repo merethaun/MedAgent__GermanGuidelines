@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+requests
+PyJWT==2.10.1
+cryptography>=41
+pymongo
+python-multipart
+pytest
+mongomock

@@ -33,6 +33,44 @@ def _coerce_llm_settings(raw: Any) -> LLMSettings:
     return LLMSettings.model_validate(raw)
 
 
+def _coerce_partial_llm_settings(raw: Any) -> Dict[str, Any]:
+    """
+    Accept partial settings for runtime overrides and keep only explicitly provided values.
+    """
+    if raw is None:
+        return {}
+
+    if isinstance(raw, LLMSettings):
+        return raw.model_dump(exclude_none=True)
+
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError as e:
+            raise ValueError("runtime llm_settings must be dict/LLMSettings or JSON string of a dict") from e
+
+    if not isinstance(raw, dict):
+        raise TypeError(f"runtime llm_settings must be dict/LLMSettings, got {type(raw)}")
+
+    return {key: value for key, value in raw.items() if value is not None}
+
+
+def _merge_llm_settings(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    merged = dict(base)
+    for key, value in override.items():
+        if value is None:
+            continue
+        if key in {"extra_headers", "extra_body"}:
+            existing = merged.get(key) or {}
+            if not isinstance(existing, dict) or not isinstance(value, dict):
+                merged[key] = value
+            else:
+                merged[key] = {**existing, **value}
+            continue
+        merged[key] = value
+    return merged
+
+
 def _render_value(raw: Any, data: Dict[str, Any]) -> Any:
     """
     Render templated string values inside nested structures.
@@ -192,10 +230,13 @@ class LLMGenerator(AbstractComponent, variant_name="generator"):
     
     def _resolve_llm_settings(self, data: Dict[str, Any]) -> LLMSettings:
         raw = self.parameters.get("llm_settings", self.default_parameters["llm_settings"])
-        if raw is None:
-            raise ValueError("No llm_settings provided. Set parameters.llm_settings.")
-        raw = _render_value(raw, data)
-        return _coerce_llm_settings(raw)
+        runtime_raw = self.context.runtime_llm_settings if self.context is not None else None
+        if raw is None and runtime_raw is None:
+            raise ValueError("No llm_settings provided. Set parameters.llm_settings or pass a runtime override.")
+
+        base_settings = _coerce_partial_llm_settings(_render_value(raw, data)) if raw is not None else {}
+        runtime_settings = _coerce_partial_llm_settings(runtime_raw)
+        return _coerce_llm_settings(_merge_llm_settings(base_settings, runtime_settings))
     
     def _resolve_session_id(self, data: Dict[str, Any]) -> str:
         key = self.parameters.get("session_id_key", self.default_parameters["session_id_key"])

@@ -91,6 +91,7 @@ class GuidelineExpanderService:
                     mode=settings.mode.value,
                     levels_up=settings.levels_up,
                     heading_level=settings.heading_level,
+                    simple_ratio_threshold=settings.simple_ratio_threshold,
                 ),
             )
 

@@ -2,16 +2,30 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import {useNavigate, useParams} from "react-router-dom";
 
 import CloseIcon from "@mui/icons-material/Close";
-import {Alert, Box, Button, CircularProgress, Container, Snackbar, Stack, Typography, useTheme} from "@mui/material";
+import {
+  Alert,
+  Box,
+  Button,
+  CircularProgress,
+  Container,
+  MenuItem,
+  Snackbar,
+  Stack,
+  TextField,
+  Typography,
+  useTheme,
+} from "@mui/material";
 import IconButton from "@mui/material/IconButton";
 
 import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 
 import {useAuth} from "../auth/AuthContext";
 import {type Chat, normalizeObjectId, useSystemApi} from "../api/system";
 import {useChatApi} from "../api/chat";
+import {useEvaluationApi} from "../api/evaluation";
 
 import ChatCreator from "../components/chat/ChatCreator";
 import ChatHeader from "../components/chat/ChatHeader";
@@ -122,23 +136,40 @@ export default function ChatInteractionPage() {
   const theme = useTheme();
   const navigate = useNavigate();
   const {chatId: rawChatId} = useParams();
+  const adminRole = import.meta.env.VITE_KEYCLOAK_ADMIN_ROLE ?? "admin";
 
   const chatId = rawChatId ?? "";
   const {getWorkflowById} = useSystemApi();
   const {getChatById, poseChat} = useChatApi();
+  const {createAnswerFeedback, createRun, listEvaluators} = useEvaluationApi();
 
   const [showCreator, setShowCreator] = useState(false);
+  const [showFeedbackDialog, setShowFeedbackDialog] = useState(false);
+  const [showEvaluationDialog, setShowEvaluationDialog] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  const [submittingEvaluation, setSubmittingEvaluation] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorToastOpen, setErrorToastOpen] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [successToastOpen, setSuccessToastOpen] = useState(false);
 
   const [chat, setChat] = useState<Chat | null>(null);
   const [workflowName, setWorkflowName] = useState<string | undefined>(undefined);
   const [selectedInteractionIndex, setSelectedInteractionIndex] = useState<number>(-1);
+  const [evaluators, setEvaluators] = useState<any[]>([]);
+  const [feedbackHelpful, setFeedbackHelpful] = useState<string>("");
+  const [feedbackRating, setFeedbackRating] = useState<string>("");
+  const [feedbackComment, setFeedbackComment] = useState<string>("");
+  const [evaluationRunName, setEvaluationRunName] = useState("");
+  const [evaluationManualMode, setEvaluationManualMode] = useState<"none" | "open" | "assigned" | "mixed">("open");
+  const [evaluationAssignee, setEvaluationAssignee] = useState("");
+  const [evaluationAssignments, setEvaluationAssignments] = useState("");
 
   const username: string | undefined = auth.username;
+  const isAdmin = auth.initialized && auth.authenticated && auth.hasRole(adminRole);
 
   // --- Viewport (for vh/vw constraints) ---
   const [viewport, setViewport] = useState(() => ({
@@ -151,6 +182,17 @@ export default function ChatInteractionPage() {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    void (async () => {
+      try {
+        setEvaluators(await listEvaluators());
+      } catch {
+        // keep UI usable even if evaluator discovery is not set up yet
+      }
+    })();
+  }, [isAdmin, listEvaluators]);
 
   const bp = theme.breakpoints.values as Record<BreakpointKey, number>;
 
@@ -459,6 +501,12 @@ export default function ChatInteractionPage() {
     return it?.retrieval_output ?? [];
   }, [chat, selectedInteractionIndex]);
 
+  const selectedInteraction = useMemo(() => {
+    if (!chat) return null;
+    if (selectedInteractionIndex < 0) return null;
+    return chat.interactions?.[selectedInteractionIndex] ?? null;
+  }, [chat, selectedInteractionIndex]);
+
   async function send(userInput: string) {
     if (!chatId) return;
 
@@ -477,6 +525,64 @@ export default function ChatInteractionPage() {
       setErrorToastOpen(true);
     } finally {
       setSending(false);
+    }
+  }
+
+  async function submitFeedback() {
+    if (!selectedInteraction || selectedInteractionIndex < 0) return;
+    setSubmittingFeedback(true);
+    setError(null);
+    try {
+      await createAnswerFeedback({
+        chat_id: chatId,
+        interaction_index: selectedInteractionIndex,
+        helpful: feedbackHelpful === "" ? null : feedbackHelpful === "yes",
+        rating: feedbackRating === "" ? null : Number(feedbackRating),
+        comment: feedbackComment.trim() || null,
+      });
+      setShowFeedbackDialog(false);
+      setFeedbackHelpful("");
+      setFeedbackRating("");
+      setFeedbackComment("");
+      setSuccessMessage("Feedback submitted.");
+      setSuccessToastOpen(true);
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+      setErrorToastOpen(true);
+    } finally {
+      setSubmittingFeedback(false);
+    }
+  }
+
+  async function sendToEvaluation() {
+    if (!chat || selectedInteractionIndex < 0) return;
+    setSubmittingEvaluation(true);
+    setError(null);
+    try {
+      const manualReviewAssignments = evaluationAssignments.trim()
+        ? JSON.parse(evaluationAssignments)
+        : [];
+      await createRun({
+        name: evaluationRunName.trim() || `chat-${chatId}-interaction-${selectedInteractionIndex + 1}`,
+        workflow_system_id: normalizeObjectId((chat as any).workflow_system_id),
+        source_type: "chat_snapshot",
+        source_chat_id: chatId,
+        source_interaction_index: selectedInteractionIndex,
+        manual_review_mode: evaluationManualMode,
+        assigned_evaluator_sub: evaluationAssignee || null,
+        assigned_evaluator_username: evaluators.find((entry) => entry.sub === evaluationAssignee)?.username ?? null,
+        manual_review_assignments: manualReviewAssignments,
+      });
+      setShowEvaluationDialog(false);
+      setEvaluationRunName("");
+      setEvaluationAssignments("");
+      setSuccessMessage("Interaction sent to evaluation.");
+      setSuccessToastOpen(true);
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+      setErrorToastOpen(true);
+    } finally {
+      setSubmittingEvaluation(false);
     }
   }
 
@@ -510,9 +616,27 @@ export default function ChatInteractionPage() {
           onNewChat={() => setShowCreator(true)}
           rightSlot={
             <Stack direction="row" spacing={1}>
-              <Button variant="outlined" disabled sx={{textTransform: "none"}}>
-                Export
+              <Button
+                variant="outlined"
+                onClick={() => setShowFeedbackDialog(true)}
+                disabled={selectedInteractionIndex < 0}
+                sx={{textTransform: "none"}}
+              >
+                Feedback
               </Button>
+              {isAdmin ? (
+                <Button
+                  variant="contained"
+                  onClick={() => {
+                    setEvaluationRunName(`chat-${chatId}-interaction-${selectedInteractionIndex + 1}`);
+                    setShowEvaluationDialog(true);
+                  }}
+                  disabled={selectedInteractionIndex < 0}
+                  sx={{textTransform: "none"}}
+                >
+                  Send to evaluation
+                </Button>
+              ) : null}
             </Stack>
           }
         />
@@ -543,6 +667,117 @@ export default function ChatInteractionPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={showFeedbackDialog} onClose={() => setShowFeedbackDialog(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Submit feedback</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <Typography color="text.secondary">
+              Share quick feedback about the currently selected interaction.
+            </Typography>
+            <TextField
+              select
+              label="Helpful"
+              value={feedbackHelpful}
+              onChange={(e) => setFeedbackHelpful(e.target.value)}
+              fullWidth
+            >
+              <MenuItem value="">No answer</MenuItem>
+              <MenuItem value="yes">Yes</MenuItem>
+              <MenuItem value="no">No</MenuItem>
+            </TextField>
+            <TextField
+              select
+              label="Rating"
+              value={feedbackRating}
+              onChange={(e) => setFeedbackRating(e.target.value)}
+              fullWidth
+            >
+              <MenuItem value="">No rating</MenuItem>
+              {[1, 2, 3, 4, 5].map((value) => (
+                <MenuItem key={value} value={String(value)}>
+                  {value}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Comment"
+              value={feedbackComment}
+              onChange={(e) => setFeedbackComment(e.target.value)}
+              multiline
+              minRows={3}
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowFeedbackDialog(false)} sx={{textTransform: "none"}}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={() => void submitFeedback()} disabled={submittingFeedback} sx={{textTransform: "none"}}>
+            Submit
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={showEvaluationDialog} onClose={() => setShowEvaluationDialog(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Send interaction to evaluation</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <TextField
+              label="Run name"
+              value={evaluationRunName}
+              onChange={(e) => setEvaluationRunName(e.target.value)}
+              fullWidth
+            />
+            <TextField
+              select
+              label="Manual review mode"
+              value={evaluationManualMode}
+              onChange={(e) => setEvaluationManualMode(e.target.value as any)}
+              fullWidth
+            >
+              <MenuItem value="none">none</MenuItem>
+              <MenuItem value="open">open</MenuItem>
+              <MenuItem value="assigned">assigned</MenuItem>
+              <MenuItem value="mixed">mixed</MenuItem>
+            </TextField>
+            <TextField
+              select
+              label="Assigned evaluator"
+              value={evaluationAssignee}
+              onChange={(e) => setEvaluationAssignee(e.target.value)}
+              disabled={evaluationManualMode === "open" || evaluationManualMode === "none"}
+              fullWidth
+            >
+              <MenuItem value="">None</MenuItem>
+              {evaluators.map((entry) => (
+                <MenuItem key={entry.sub} value={entry.sub}>
+                  {entry.username || entry.sub}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Mixed assignment JSON"
+              value={evaluationAssignments}
+              onChange={(e) => setEvaluationAssignments(e.target.value)}
+              disabled={evaluationManualMode !== "mixed"}
+              multiline
+              minRows={3}
+              helperText='Optional. Example: [{"question_id":"...","evaluator_sub":"...","evaluator_username":"alice"}]'
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowEvaluationDialog(false)} sx={{textTransform: "none"}}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={() => void sendToEvaluation()} disabled={submittingEvaluation} sx={{textTransform: "none"}}>
+            Create evaluation item
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Snackbar
         open={errorToastOpen && Boolean(error)}
         autoHideDuration={8000}
@@ -559,6 +794,25 @@ export default function ChatInteractionPage() {
           sx={{maxWidth: 720}}
         >
           {error}
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={successToastOpen && Boolean(successMessage)}
+        autoHideDuration={4000}
+        onClose={(_, reason) => {
+          if (reason === "clickaway") return;
+          setSuccessToastOpen(false);
+        }}
+        anchorOrigin={{vertical: "bottom", horizontal: "right"}}
+      >
+        <Alert
+          severity="success"
+          variant="filled"
+          onClose={() => setSuccessToastOpen(false)}
+          sx={{maxWidth: 520}}
+        >
+          {successMessage}
         </Alert>
       </Snackbar>
 

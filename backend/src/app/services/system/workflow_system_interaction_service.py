@@ -27,6 +27,7 @@ class WorkflowSystemInteractionService:
             self,
             wf_id: str,
             chat: Chat,
+            runtime_llm_settings: Optional[Dict[str, Any]] = None,
     ) -> Tuple[str, List[RetrievedWorkflowItem], float, float, List[WorkflowComponentExecutionResult]]:
         wf = self.storage.get_workflow_by_id(wf_id)
         runtime = WorkflowRuntime(
@@ -36,6 +37,7 @@ class WorkflowSystemInteractionService:
             context=ComponentContext(
                 wf_id=wf_id,
                 llm_interaction_service=self.llm_interaction_service,
+                runtime_llm_settings=runtime_llm_settings,
             ),
         )
         

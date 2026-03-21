@@ -6,6 +6,8 @@ import {alpha} from "@mui/material/styles";
 import {UI} from "../theme";
 
 const ADMIN_ROLE = import.meta.env.VITE_KEYCLOAK_ADMIN_ROLE ?? "admin";
+const EVALUATOR_ROLE = import.meta.env.VITE_KEYCLOAK_EVALUATOR_ROLE ?? "evaluator";
+const HEADER_LOGO_SRC = "/medagent-header-logo.png";
 
 export default function NavBar() {
   const auth = useAuth();
@@ -16,6 +18,7 @@ export default function NavBar() {
   const chatId = chatMatch?.params?.chatId;
 
   const isAdmin = auth.initialized && auth.authenticated && auth.hasRole(ADMIN_ROLE);
+  const isEvaluator = auth.initialized && auth.authenticated && (auth.hasRole(EVALUATOR_ROLE) || isAdmin);
 
   const currentTab =
     location.pathname === "/login"
@@ -26,6 +29,10 @@ export default function NavBar() {
           ? "/chats"
           : location.pathname.startsWith("/admin/references")
             ? "/admin/references"
+            : location.pathname.startsWith("/admin/evaluation")
+              ? "/admin/evaluation"
+              : location.pathname.startsWith("/evaluation/tasks")
+                ? "/evaluation/tasks"
             : false;
 
   return (
@@ -47,20 +54,40 @@ export default function NavBar() {
           py: 1,
         }}
       >
-        <Typography
-          variant="h6"
+        <Box
           component={RouterLink}
           to="/chats"
           sx={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 1.25,
+            mr: 1,
             textDecoration: "none",
             color: "text.primary",
-            fontWeight: 800,
-            letterSpacing: 0.2,
-            mr: 1,
+            flexShrink: 0,
           }}
         >
-          MedAgent
-        </Typography>
+          <Box
+            component="img"
+            src={HEADER_LOGO_SRC}
+            alt=""
+            sx={{
+              display: "block",
+              height: {xs: 34, sm: 40},
+              width: "auto",
+            }}
+          />
+          <Typography
+            variant="h6"
+            sx={{
+              color: "inherit",
+              fontWeight: 800,
+              letterSpacing: 0.2,
+            }}
+          >
+            MedAgent
+          </Typography>
+        </Box>
 
         <Tabs
           value={currentTab}
@@ -87,6 +114,22 @@ export default function NavBar() {
               value="/admin/references"
               component={RouterLink}
               to="/admin/references"
+            />
+          ) : null}
+          {isAdmin ? (
+            <Tab
+              label="Evaluation admin"
+              value="/admin/evaluation"
+              component={RouterLink}
+              to="/admin/evaluation"
+            />
+          ) : null}
+          {isEvaluator ? (
+            <Tab
+              label="Evaluation tasks"
+              value="/evaluation/tasks"
+              component={RouterLink}
+              to="/evaluation/tasks"
             />
           ) : null}
         </Tabs>

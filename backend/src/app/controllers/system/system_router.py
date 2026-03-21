@@ -1,13 +1,13 @@
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 
 from app.constants.auth_config import ROLE_ADMIN, ROLE_USER
 from app.controllers.dependencies.auth_dependencies import require_roles
 from app.exceptions.knowledge.graph import GraphNotFoundError
 from app.exceptions.system.chat import ChatNotFoundError
-from app.models.system.system_chat_interaction import Chat, RenameChatRequest
+from app.models.system.system_chat_interaction import Chat, PoseQuestionRequest, RenameChatRequest
 from app.models.system.workflow_system import WorkflowConfig
 from app.services.service_registry import get_chat_service, get_workflow_storage_service
 from app.services.system import WorkflowSystemStorageService
@@ -299,11 +299,24 @@ def delete_chat(
 )
 def pose_question(
         chat_id: str,
-        user_input: str = Query(..., description="User input / question"),
+        payload: PoseQuestionRequest | None = Body(default=None),
+        user_input: Optional[str] = Query(default=None, description="User input / question"),
         chat_service: ChatService = Depends(get_chat_service),
 ) -> Chat:
     try:
-        return chat_service.pose_question(chat_id, user_input)
+        resolved_user_input = payload.user_input if payload is not None else user_input
+        if not resolved_user_input:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="user_input is required")
+
+        runtime_llm_settings = None
+        if payload is not None and payload.runtime_llm_settings is not None:
+            runtime_llm_settings = payload.runtime_llm_settings
+
+        return chat_service.pose_question(
+            chat_id,
+            resolved_user_input,
+            runtime_llm_settings=runtime_llm_settings,
+        )
     except GraphNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValueError as e:

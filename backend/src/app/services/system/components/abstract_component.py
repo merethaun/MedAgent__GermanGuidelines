@@ -11,6 +11,7 @@ from app.models.system.system_chat_interaction import WorkflowComponentExecution
 class ComponentContext:
     wf_id: str
     llm_interaction_service: Any  # LLMInteractionService (keep Any to avoid import cycles)
+    runtime_llm_settings: Optional[Dict[str, Any]] = None
 
 
 class AbstractComponent(ABC):

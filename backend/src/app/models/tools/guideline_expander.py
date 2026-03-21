@@ -35,6 +35,16 @@ class GuidelineExpanderSettings(BaseModel):
     mode: HierarchySelectionMode = Field(default=HierarchySelectionMode.DIRECT_PARENT)
     levels_up: int = Field(default=1, ge=1, le=10)
     heading_level: Optional[int] = Field(default=None, ge=0)
+    simple_ratio_threshold: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Optional coverage ratio required before a resolved hierarchy target section is promoted. "
+            "Computed as matched seed references within that target divided by all descendant references in the target section. "
+            "If omitted, any resolved target section expands immediately."
+        ),
+    )
 
     @model_validator(mode="after")
     def _validate(self) -> "GuidelineExpanderSettings":

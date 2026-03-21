@@ -1,13 +1,13 @@
-import re
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from bson import ObjectId
+from pydantic import TypeAdapter
 from pymongo.collection import Collection
 from pymongo.results import DeleteResult, InsertOneResult, UpdateResult
-from pydantic import TypeAdapter
 
 from app.exceptions.system.chat import ChatNotFoundError
 from app.models.system.system_chat_interaction import Chat, ChatInteraction, RetrievedWorkflowItem
@@ -158,7 +158,12 @@ class ChatService:
     # ----------------------------
     # Interaction
     # ----------------------------
-    def pose_question(self, chat_id: Union[str, ObjectId], user_input: str) -> Chat:
+    def pose_question(
+            self,
+            chat_id: Union[str, ObjectId],
+            user_input: str,
+            runtime_llm_settings: Optional[Dict[str, Any]] = None,
+    ) -> Chat:
         """
         Append a new ChatInteraction (user_input) and generate/store the assistant response
         using the configured workflow system.
@@ -196,7 +201,11 @@ class ChatService:
         
         # Generate response via workflow
         logger.debug("Calling workflow generate_response: workflow_system_id=%s", str(chat.workflow_system_id))
-        out = self.workflow_interaction_service.generate_response(chat.workflow_system_id, chat)
+        out = self.workflow_interaction_service.generate_response(
+            chat.workflow_system_id,
+            chat,
+            runtime_llm_settings=runtime_llm_settings,
+        )
         
         # Keep your tuple contract (generator_output, retrieval_output, response_latency, retrieval_latency, execution)
         generator_output, retrieval_output, response_latency, retrieval_latency, execution = out

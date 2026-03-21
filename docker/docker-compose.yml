@@ -8,10 +8,12 @@ services:
       - "5173:5173"
     environment:
       VITE_BACKEND_URL: http://localhost:5000
+      VITE_EVALUATION_URL: http://localhost:5001
       VITE_KEYCLOAK_URL: http://localhost:8080
       VITE_KEYCLOAK_REALM: medagent
       VITE_KEYCLOAK_CLIENT_ID: medagent-frontend
       VITE_KEYCLOAK_ADMIN_ROLE: admin
+      VITE_KEYCLOAK_EVALUATOR_ROLE: evaluator
       CHOKIDAR_USEPOLLING: "true"
       WATCHPACK_POLLING: "true"
     volumes:
@@ -21,6 +23,8 @@ services:
       - backend
     depends_on:
       backend:
+        condition: service_started
+      evaluation:
         condition: service_started
       keycloak:
         condition: service_healthy
@@ -77,6 +81,44 @@ services:
       neo4j:
         condition: service_healthy
       snomed-lite:
+        condition: service_started
+
+  evaluation:
+    build:
+      context: ../evaluation
+      dockerfile: ../docker/evaluation.Dockerfile
+    container_name: medagent-evaluation
+    working_dir: /src
+    ports:
+      - "5001:5001"
+    environment:
+      # Keycloak and auth settings
+      OIDC_ALLOWED_ISSUERS: "http://localhost:8080/realms/medagent,http://keycloak:8080/realms/medagent,http://127.0.0.1:8080/realms/medagent"
+      OIDC_ISSUER: http://keycloak:8080/realms/medagent
+      OIDC_JWKS_URL: "http://keycloak:8080/realms/medagent/protocol/openid-connect/certs"
+      OIDC_AUDIENCE: medagent-evaluation
+      OIDC_VERIFY_AUDIENCE: "false"
+      MEDAGENT_ROLE_ADMIN: admin
+      MEDAGENT_ROLE_USER: study_user
+      MEDAGENT_ROLE_EVALUATOR: evaluator
+      # MongoDB setting
+      EVALUATION_MONGODB_URI: mongodb://${MONGODB_ROOT_USERNAME}:${MONGODB_ROOT_PASSWORD}@medagent-mongodb:27017
+      EVALUATION_MONGODB_DB_NAME: ${EVALUATION_MONGODB_DB_NAME}
+      # Backend API access
+      BACKEND_API_BASE_URL: http://backend:5000
+      # Evaluation model settings
+      EVALUATION_LLM_MODEL: gpt-4.1-mini
+      EVALUATION_EMBEDDING_PROVIDER: baai-bge-m3
+    volumes:
+      - ../evaluation/src:/src
+    networks:
+      - backend
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      backend:
         condition: service_started
 
   weaviate:
@@ -177,9 +219,9 @@ services:
       - ../data/neo4j/data:/data
       - ../data/neo4j/logs:/logs
     healthcheck:
-      test: ["CMD-SHELL", "cypher-shell -u ${NEO4J_USER} -p ${NEO4J_PASSWORD} 'RETURN 1' || exit 1"]
+      test: [ "CMD-SHELL", "cypher-shell -u ${NEO4J_USER} -p ${NEO4J_PASSWORD} 'RETURN 1' || exit 1" ]
       interval: 10s
-      timeout: 5s
+      timeout: 20s
       retries: 10
     networks:
       - backend
