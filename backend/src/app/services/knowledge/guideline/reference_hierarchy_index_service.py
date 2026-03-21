@@ -1,6 +1,6 @@
 import hashlib
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 from app.constants.mongodb_config import REFERENCE_GROUP_HIERARCHY_INDEX_FOLDER
 from app.models.knowledge.guideline.reference_hierarchy_models import (
@@ -124,8 +124,19 @@ class ReferenceHierarchyIndexService:
             mode: str,
             levels_up: int = 1,
             heading_level: Optional[int] = None,
+            simple_ratio_threshold: Optional[float] = None,
     ) -> List[str]:
         snapshot = self.build(reference_group_id)
+        if simple_ratio_threshold is not None:
+            return self._expand_with_section_promotion(
+                snapshot=snapshot,
+                reference_ids=reference_ids,
+                mode=mode,
+                levels_up=levels_up,
+                heading_level=heading_level,
+                simple_ratio_threshold=simple_ratio_threshold,
+            )
+
         ordered_ids: List[str] = []
         seen = set()
 
@@ -151,6 +162,100 @@ class ReferenceHierarchyIndexService:
                     ordered_ids.append(candidate_id)
 
         return ordered_ids
+
+    def _expand_with_section_promotion(
+            self,
+            *,
+            snapshot: ReferenceHierarchyIndexSnapshot,
+            reference_ids: List[str],
+            mode: str,
+            levels_up: int,
+            heading_level: Optional[int],
+            simple_ratio_threshold: float,
+    ) -> List[str]:
+        ordered_ids: List[str] = []
+        seen = set()
+        promoted_reference_ids: Set[str] = set()
+        coverage_by_node: Dict[str, Set[str]] = {}
+        resolved_target_by_reference: Dict[str, str] = {}
+
+        for reference_id in reference_ids:
+            node_id = snapshot.reference_to_node.get(reference_id)
+            if not node_id:
+                continue
+
+            target_node = self._resolve_target_node(
+                snapshot=snapshot,
+                node_id=node_id,
+                mode=mode,
+                levels_up=levels_up,
+                heading_level=heading_level,
+            )
+            resolved_target_by_reference[reference_id] = target_node
+            coverage_by_node.setdefault(target_node, set()).add(reference_id)
+
+        candidate_nodes: Set[str] = set()
+        for node_id, covered_reference_ids in coverage_by_node.items():
+            node = snapshot.nodes.get(node_id)
+            if node is None:
+                continue
+
+            descendant_count = max(1, len(node.descendant_reference_ids))
+            coverage_ratio = len(covered_reference_ids) / float(descendant_count)
+            if coverage_ratio >= simple_ratio_threshold:
+                candidate_nodes.add(node_id)
+
+        promoted_node_ids: List[str] = []
+        seen_promoted_nodes: Set[str] = set()
+        for reference_id in reference_ids:
+            target_node = resolved_target_by_reference.get(reference_id)
+            if target_node is None or target_node not in candidate_nodes or target_node in seen_promoted_nodes:
+                continue
+            if self._has_candidate_ancestor(snapshot, target_node, candidate_nodes):
+                continue
+            promoted_node_ids.append(target_node)
+            seen_promoted_nodes.add(target_node)
+
+        logger.debug(
+            "ReferenceHierarchyIndexService.expand thresholded: mode=%s threshold=%.3f references=%d candidate_sections=%d promoted_sections=%d",
+            mode,
+            simple_ratio_threshold,
+            len(reference_ids),
+            len(candidate_nodes),
+            len(promoted_node_ids),
+        )
+
+        for node_id in promoted_node_ids:
+            node = snapshot.nodes.get(node_id)
+            if node is None:
+                continue
+            for candidate_id in node.descendant_reference_ids:
+                promoted_reference_ids.add(candidate_id)
+                if candidate_id not in seen:
+                    seen.add(candidate_id)
+                    ordered_ids.append(candidate_id)
+
+        for reference_id in reference_ids:
+            if reference_id in promoted_reference_ids:
+                continue
+            if reference_id not in seen:
+                seen.add(reference_id)
+                ordered_ids.append(reference_id)
+
+        return ordered_ids
+
+    def _has_candidate_ancestor(
+            self,
+            snapshot: ReferenceHierarchyIndexSnapshot,
+            node_id: str,
+            candidate_nodes: Set[str],
+    ) -> bool:
+        current = snapshot.nodes.get(node_id)
+        while current is not None and current.parent_id:
+            if current.parent_id in candidate_nodes:
+                return True
+            current = snapshot.nodes.get(current.parent_id)
+        return False
 
     def _resolve_target_node(
             self,

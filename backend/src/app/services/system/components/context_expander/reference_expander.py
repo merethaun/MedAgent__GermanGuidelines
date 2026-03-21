@@ -69,6 +69,19 @@ class NeighborhoodReferencesExpander(_ReferenceExpanderBase, variant_name="neigh
 
 
 class HierarchyReferencesExpander(_ReferenceExpanderBase, variant_name="hierarchy_references"):
+    @classmethod
+    def get_init_parameters(cls) -> Dict[str, Dict[str, Any]]:
+        base = super().get_init_parameters()
+        base["settings"] = {
+            "type": "object",
+            "description": (
+                "GuidelineExpanderSettings for hierarchy expansion. Supports structural targeting via "
+                "'mode', 'levels_up', or 'heading_level', plus optional 'simple_ratio_threshold' to "
+                "promote a section only when enough of its descendant references are covered by the seed set."
+            ),
+        }
+        return base
+
     def execute(self, data: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
         started = time.time()
         references = self._resolve_references(data)
@@ -77,6 +90,15 @@ class HierarchyReferencesExpander(_ReferenceExpanderBase, variant_name="hierarch
             raise ValueError("HierarchyReferencesExpander requires a 'settings' object.")
         
         settings = GuidelineExpanderSettings.model_validate(_render_value(raw_settings, data))
+        logger.info(
+            "HierarchyReferencesExpander started: component_id=%s seeds=%d mode=%s levels_up=%d heading_level=%s simple_ratio_threshold=%s",
+            self.id,
+            len(references),
+            settings.mode.value,
+            settings.levels_up,
+            settings.heading_level,
+            settings.simple_ratio_threshold,
+        )
         response = get_guideline_expander_service().expand_references(
             GuidelineExpanderRequest(references=references, settings=settings),
         )

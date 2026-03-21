@@ -82,10 +82,11 @@ def test_neighborhood_expander_adds_adjacent_chunks(monkeypatch):
 def test_hierarchy_expander_adds_section_references(monkeypatch):
     seed = _make_reference("69b2b1ea9ced93a73a11bcde", "Seed chunk", 11)
     sibling = _make_reference("69b2b1ea9ced93a73a11bce0", "Sibling chunk", 12)
-    
+
     class FakeExpanderService:
         def expand_references(self, request):
             assert request.settings.kind.value == "hierarchy"
+            assert request.settings.simple_ratio_threshold == 0.5
             return type(
                 "Response",
                 (),
@@ -109,6 +110,7 @@ def test_hierarchy_expander_adds_section_references(monkeypatch):
             "settings": {
                 "kind": "hierarchy",
                 "mode": "direct_parent",
+                "simple_ratio_threshold": 0.5,
             },
         },
         variant="hierarchy_references",

@@ -56,16 +56,17 @@ def test_guideline_expander_service_expands_hierarchy_from_reference_group():
             return lookup[str(reference_id)]
 
     class FakeHierarchyIndexService:
-        def expand(self, reference_group_id, reference_ids, *, mode, levels_up, heading_level):
+        def expand(self, reference_group_id, reference_ids, *, mode, levels_up, heading_level, simple_ratio_threshold):
             assert str(reference_group_id) == "69b2b1ea9ced93a73a11bcee"
             assert reference_ids == [str(seed.id)]
+            assert simple_ratio_threshold == 0.5
             return [str(seed.id), str(sibling.id)]
 
     service = GuidelineExpanderService(FakeReferenceService(), FakeHierarchyIndexService())
     response = service.expand_references(
         GuidelineExpanderRequest(
             references=[seed],
-            settings=GuidelineExpanderSettings(kind="hierarchy", mode="direct_parent"),
+            settings=GuidelineExpanderSettings(kind="hierarchy", mode="direct_parent", simple_ratio_threshold=0.5),
         ),
     )
 

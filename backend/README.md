@@ -224,6 +224,13 @@ The current expansion options are:
 - `hierarchy_references`: larger structural context from the hierarchy index
 - `graph_references`: graph-based contextual expansion through structure, keywords, and similarity
 
+For `hierarchy_references`, expansion can be purely structural or thresholded:
+
+- use `mode` with `direct_parent`, `levels_up`, or `heading_level` to decide which hierarchy node each seed reference maps to
+- if `simple_ratio_threshold` is omitted, every resolved target section is expanded immediately
+- if `simple_ratio_threshold` is set, a section is only promoted when the ratio `matched_seed_references / descendant_references_in_section` meets the threshold
+- this makes it possible to expand to a broader section level, such as `heading_level = 2`, without always pulling in the full section for a single matching chunk
+
 Technically, graph expansion is also a context expansion strategy. It is described separately here because it requires additional graph setup and often behaves more like a second-stage relevance layer than a purely structural expansion step.
 
 Setup requirements differ by variant:
