@@ -4,7 +4,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.models.evaluation.metrics import AutomaticMetrics, EmbeddingMetrics, GPTScoreMetrics, LexicalMetrics, RetrievalMetrics
 from app.models.evaluation.run import EvaluationSample
@@ -32,24 +32,28 @@ class MetricService:
         return metrics
 
     def _compute_retrieval_metrics(self, sample: EvaluationSample) -> RetrievalMetrics:
-        expected = [self._normalize_text(snippet.retrieval_text) for snippet in sample.expected_retrieval if snippet.retrieval_text]
-        actual = [self._normalize_text(self._extract_retrieval_text(item)) for item in sample.retrieval_output if self._extract_retrieval_text(item)]
+        expected = [
+            normalized_text
+            for normalized_text in (self._normalize_text(snippet.retrieval_text) for snippet in sample.expected_retrieval)
+            if normalized_text
+        ]
+        actual = [
+            normalized_text
+            for normalized_text in (
+                self._normalize_text(self._extract_retrieval_text(item)) for item in sample.retrieval_output
+            )
+            if normalized_text
+        ]
         if not expected:
             return RetrievalMetrics(retrieval_latency=sample.retrieval_latency)
 
-        matched_expected = sum(
-            1
-            for expected_item in expected
-            if any(expected_item and (expected_item in actual_item or actual_item in expected_item) for actual_item in actual)
-        )
-        matched_actual = sum(
-            1
-            for actual_item in actual
-            if any(actual_item and (actual_item in expected_item or expected_item in actual_item) for expected_item in expected)
-        )
+        tp_strings, fn_strings, fp_strings = self._get_tp_fp_fn_strings(expected.copy(), actual.copy())
+        tp = sum(self._string_to_unit_count(text) for text in tp_strings)
+        fn = sum(self._string_to_unit_count(text) for text in fn_strings)
+        fp = sum(self._string_to_unit_count(text) for text in fp_strings)
 
-        precision = matched_actual / len(actual) if actual else 0.0
-        recall = matched_expected / len(expected) if expected else 0.0
+        precision = tp / (tp + fp) if (tp + fp) else 0.0
+        recall = tp / (tp + fn) if (tp + fn) else 0.0
         f1 = (2 * precision * recall / (precision + recall)) if precision + recall else 0.0
         return RetrievalMetrics(precision=precision, recall=recall, f1=f1, retrieval_latency=sample.retrieval_latency)
 
@@ -134,10 +138,83 @@ class MetricService:
         if item.get("retrieval"):
             return str(item["retrieval"])
         properties = item.get("weaviate_properties") or {}
-        for key in ("contained_text", "recommendation_content", "statement_content", "caption", "plain_text"):
+        for key in (
+                "contained_text",
+                "recommendation_content",
+                "statement_content",
+                "metadata_content",
+                "plain_text",
+                "table_markdown",
+                "describing_text",
+                "caption",
+        ):
             if properties.get(key):
                 return str(properties[key])
         return ""
+
+    @staticmethod
+    def _string_to_unit_count(text: str) -> int:
+        return len("".join(text.split()))
+
+    @staticmethod
+    def _get_tp_fp_fn_strings(
+            expected_retrieval_texts: List[str],
+            actual_retrieval_texts: List[str],
+    ) -> Tuple[List[str], List[str], List[str]]:
+        def get_lcs(left: str, right: str) -> Optional[str]:
+            matcher = SequenceMatcher(None, left, right)
+            match = matcher.find_longest_match(0, len(left), 0, len(right))
+            if match.size == 0:
+                return None
+            longest_common_substring = left[match.a:match.a + match.size]
+            if not longest_common_substring.strip():
+                return None
+            return longest_common_substring
+
+        def split_once(text: str, substring: str) -> Tuple[str, str]:
+            before, _, after = text.partition(substring)
+            return before, after
+
+        tp_strings: List[str] = []
+        expected_index = 0
+        while expected_index < len(expected_retrieval_texts):
+            expected_text = expected_retrieval_texts[expected_index]
+            actual_index = 0
+            while actual_index < len(actual_retrieval_texts):
+                actual_text = actual_retrieval_texts[actual_index]
+                longest_common_substring = get_lcs(expected_text, actual_text)
+                if longest_common_substring is None:
+                    actual_index += 1
+                    continue
+
+                if actual_text == longest_common_substring:
+                    tp_strings.append(actual_text)
+                    actual_retrieval_texts[actual_index] = ""
+                    left_text, right_text = split_once(expected_text, actual_text)
+                    expected_retrieval_texts[expected_index] = left_text
+                    expected_retrieval_texts.insert(expected_index + 1, right_text)
+                elif expected_text == longest_common_substring:
+                    tp_strings.append(expected_text)
+                    expected_retrieval_texts[expected_index] = ""
+                    left_text, right_text = split_once(actual_text, expected_text)
+                    actual_retrieval_texts[actual_index] = left_text
+                    actual_retrieval_texts.insert(actual_index + 1, right_text)
+                elif actual_text.startswith(longest_common_substring) and expected_text.endswith(longest_common_substring):
+                    tp_strings.append(longest_common_substring)
+                    expected_retrieval_texts[expected_index] = expected_text[:-len(longest_common_substring)]
+                    actual_retrieval_texts[actual_index] = actual_text[len(longest_common_substring):]
+                elif actual_text.endswith(longest_common_substring) and expected_text.startswith(longest_common_substring):
+                    tp_strings.append(longest_common_substring)
+                    expected_retrieval_texts[expected_index] = expected_text[len(longest_common_substring):]
+                    actual_retrieval_texts[actual_index] = actual_text[:-len(longest_common_substring)]
+
+                actual_index += 1
+
+            expected_index += 1
+
+        fp_strings = [text for text in actual_retrieval_texts if text]
+        fn_strings = [text for text in expected_retrieval_texts if text]
+        return tp_strings, fn_strings, fp_strings
 
     @staticmethod
     def _normalize_text(text: str) -> str:

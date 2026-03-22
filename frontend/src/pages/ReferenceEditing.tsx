@@ -293,12 +293,14 @@ export default function ReferenceEditorPage() {
     side: "left" | "right";
     minW: number;
     maxW: number;
+    nextW: number;
   } | null>(null);
 
   const dragRightState = useRef<{
     startX: number;
     startRightPx: number;
     contentW: number;
+    nextRatio: number;
   } | null>(null);
 
   const dragHeightState = useRef<{
@@ -306,12 +308,14 @@ export default function ReferenceEditorPage() {
     startH: number;
     minH: number;
     maxH: number;
+    nextH: number;
   } | null>(null);
 
   const dragListState = useRef<{
     startY: number;
     startListPx: number;
     contentH: number;
+    nextRatio: number;
   } | null>(null);
 
   function onWrapperResizeMouseDown(e: React.MouseEvent, side: "left" | "right") {
@@ -330,6 +334,7 @@ export default function ReferenceEditorPage() {
       side,
       minW: minWrapperWidthPx,
       maxW: maxWrapperWidthPx,
+      nextW: startW,
     };
 
     const prevCursor = document.body.style.cursor;
@@ -345,10 +350,12 @@ export default function ReferenceEditorPage() {
       const dx = ev.clientX - st.startX;
       const signed = st.side === "right" ? dx : -dx;
       const nextW = clamp(st.startW + signed * 2, st.minW, st.maxW);
-      setWrapperWidthPx(nextW);
+      st.nextW = nextW;
     };
 
     const onUp = () => {
+      const st = dragWrapperState.current;
+      if (st) setWrapperWidthPx(st.nextW);
       dragWrapperState.current = null;
       document.body.style.cursor = prevCursor;
       document.body.style.userSelect = prevSelect;
@@ -373,6 +380,7 @@ export default function ReferenceEditorPage() {
       startX: e.clientX,
       startRightPx,
       contentW,
+      nextRatio: rightRatioClamped,
     };
 
     const prevCursor = document.body.style.cursor;
@@ -392,10 +400,12 @@ export default function ReferenceEditorPage() {
       const maxRightPx = Math.min(st.contentW - MIN_PDF_COL_PX, maxRightRatioBase * st.contentW);
 
       const clampedPx = clamp(nextRightPx, minRightPx, Math.max(minRightPx, maxRightPx));
-      setRightWidthRatio(clampedPx / st.contentW);
+      st.nextRatio = clampedPx / st.contentW;
     };
 
     const onUp = () => {
+      const st = dragRightState.current;
+      if (st) setRightWidthRatio(st.nextRatio);
       dragRightState.current = null;
       document.body.style.cursor = prevCursor;
       document.body.style.userSelect = prevSelect;
@@ -418,6 +428,7 @@ export default function ReferenceEditorPage() {
       startH: panelHeightPx,
       minH: minFixedHeightPx,
       maxH: maxFixedHeightPx,
+      nextH: panelHeightPx,
     };
 
     const prevCursor = document.body.style.cursor;
@@ -432,10 +443,12 @@ export default function ReferenceEditorPage() {
 
       const dy = ev.clientY - st.startY;
       const nextH = clamp(st.startH + dy, st.minH, st.maxH);
-      setFixedMaxHeightPx(nextH);
+      st.nextH = nextH;
     };
 
     const onUp = () => {
+      const st = dragHeightState.current;
+      if (st) setFixedMaxHeightPx(st.nextH);
       dragHeightState.current = null;
       document.body.style.cursor = prevCursor;
       document.body.style.userSelect = prevSelect;
@@ -459,6 +472,7 @@ export default function ReferenceEditorPage() {
       startY: e.clientY,
       startListPx,
       contentH,
+      nextRatio: listRatioClamped,
     };
 
     const prevCursor = document.body.style.cursor;
@@ -481,10 +495,12 @@ export default function ReferenceEditorPage() {
       );
 
       const clampedPx = clamp(nextListPx, minListPx, Math.max(minListPx, maxListPx));
-      setListHeightRatio(clampedPx / st.contentH);
+      st.nextRatio = clampedPx / st.contentH;
     };
 
     const onUp = () => {
+      const st = dragListState.current;
+      if (st) setListHeightRatio(st.nextRatio);
       dragListState.current = null;
       document.body.style.cursor = prevCursor;
       document.body.style.userSelect = prevSelect;

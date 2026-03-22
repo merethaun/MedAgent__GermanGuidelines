@@ -32,9 +32,11 @@ function Bubble(props: {
           px: 2,
           py: 1.25,
           borderRadius: 1,
-          bgcolor: alpha(theme.palette.text.primary, 0.07),
+          bgcolor: selected
+            ? "white"
+            : alpha(theme.palette.text.primary, 0.07),
           color: "text.primary",
-          border: "0.5px solid",
+          border: "1.5px solid",
           borderColor: selected
             ? alpha(theme.palette.primary.main, 0.17)
             : alpha("#000", 0.0),
@@ -220,14 +222,6 @@ export default function ChatDisplay(props: {
         minHeight: minHeightPx,
       }}
     >
-      <Box sx={{p: 2}}>
-        <Typography variant="h6" sx={{fontWeight: 800}}>
-          Messages
-        </Typography>
-      </Box>
-
-      <Divider/>
-
       {/* Scrollable message list */}
       <Box
         ref={scrollRef}

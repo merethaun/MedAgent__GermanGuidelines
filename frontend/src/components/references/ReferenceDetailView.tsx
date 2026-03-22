@@ -1,3 +1,5 @@
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {Fragment, type ReactNode, useMemo} from "react";
 import {
   Box,
@@ -25,6 +27,8 @@ type Props = {
   guideline?: GuidelineEntry | null;
   emptyStateText?: string;
   pdfSlot?: ReactNode;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 };
 
 function pagesFromBBoxes(reference?: GuidelineReference | null): string {
@@ -360,96 +364,127 @@ export default function ReferenceDetailView(props: Props) {
     guideline = null,
     emptyStateText = "Select a reference to inspect it.",
     pdfSlot,
+    collapsed = false,
+    onToggleCollapsed,
   } = props;
 
   const hierarchyLabel = useMemo(() => getHierarchyLabel(reference?.document_hierarchy), [reference]);
   const content = useMemo(() => (reference ? getReferenceBody(reference) : ""), [reference]);
   const extraDetails = useMemo(() => (reference ? renderTypeSpecificDetails(reference) : []), [reference]);
+  const referenceHeading = reference ? getReferenceHeading(reference) : "";
+  const title = referenceHeading
+    ? `Details: "${referenceHeading}"`
+    : "Details";
 
   return (
-    <Card variant="outlined" sx={{height: "100%", minHeight: 0}}>
+    <Card variant="outlined" sx={collapsed ? {height: "auto"} : {height: "100%", minHeight: 0}}>
       <CardContent
-        sx={{
-          height: "100%",
-          minHeight: 0,
-          display: "flex",
-          flexDirection: "column",
-          p: 0,
-        }}
+        sx={collapsed
+          ? {p: 0, pb: "0px !important"}
+          : {
+            height: "100%",
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+            p: 0,
+          }}
       >
-        <Box sx={{p: 2, pb: 1.25}}>
-          <Typography variant="subtitle1" sx={{fontWeight: 800}}>
-            {getReferenceHeading(reference ?? ({} as GuidelineReference))
-              ? `Details: "${getReferenceHeading(reference ?? ({} as GuidelineReference))}"`
-              : "Details"}
+        <Box
+          onClick={onToggleCollapsed}
+          role={onToggleCollapsed ? "button" : undefined}
+          aria-expanded={onToggleCollapsed ? (!collapsed).toString() : undefined}
+          tabIndex={onToggleCollapsed ? 0 : undefined}
+          onKeyDown={(event) => {
+            if (!onToggleCollapsed) return;
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            onToggleCollapsed();
+          }}
+          sx={{
+            p: 2,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1,
+            cursor: onToggleCollapsed ? "pointer" : "default",
+            "&:hover": onToggleCollapsed ? {bgcolor: "action.hover"} : undefined,
+          }}
+        >
+          <Typography variant="subtitle1" sx={{fontWeight: 800, minWidth: 0}} noWrap>
+            {title}
           </Typography>
+          {onToggleCollapsed ? (
+            collapsed ? <ExpandMoreIcon color="action" fontSize="small"/> : <ExpandLessIcon color="action" fontSize="small"/>
+          ) : null}
         </Box>
 
-        <Divider/>
+        {!collapsed ? <Divider/> : null}
 
-        <Box sx={{flex: 1, minHeight: 0, overflow: "auto", p: 2}}>
-          {!reference ? (
-            <Typography color="text.secondary">{emptyStateText}</Typography>
-          ) : (
-            <Stack spacing={2}>
-              <Stack spacing={1}>
-                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                  <Chip label={`p. ${pagesFromBBoxes(reference)}`} size="small" variant="outlined"/>
-                  <Chip
-                    label={`Guideline: ${guideline?.title ?? normalizeObjectId(reference.guideline_id)}`}
-                    size="small"
-                    variant="outlined"
-                  />
-                </Stack>
-              </Stack>
-
-              <Box>
-                <Typography variant="body2" sx={{fontWeight: 700, mb: 0.75}}>
-                  Document Path
-                </Typography>
-                <Typography color="text.secondary" sx={{whiteSpace: "pre-wrap"}}>
-                  {hierarchyLabel}
-                </Typography>
-              </Box>
-
-              {reference.note?.trim() ? (
-                <Box>
-                  <Typography variant="subtitle2" sx={{fontWeight: 800, mb: 0.75}}>
-                    Note
-                  </Typography>
-                  <Typography sx={{whiteSpace: "pre-wrap"}}>{reference.note}</Typography>
-                </Box>
-              ) : null}
-
-              <Divider/>
-
-              <Box>
-                <Typography variant="body2" sx={{fontWeight: 700, mb: 1}}>
-                  Content
-                </Typography>
-                {renderMarkdown(content)}
-              </Box>
-
-              {extraDetails.length ? (
-                <>
-                  <Divider/>
-                  <Stack spacing={2}>
-                    {extraDetails}
+        {!collapsed ? (
+          <Box sx={{flex: 1, minHeight: 0, overflow: "auto", p: 2}}>
+            {!reference ? (
+              <Typography color="text.secondary">{emptyStateText}</Typography>
+            ) : (
+              <Stack spacing={2}>
+                <Stack spacing={1}>
+                  <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                    <Chip label={`p. ${pagesFromBBoxes(reference)}`} size="small" variant="outlined"/>
+                    <Chip
+                      label={`Guideline: ${guideline?.title ?? normalizeObjectId(reference.guideline_id)}`}
+                      size="small"
+                      variant="outlined"
+                    />
                   </Stack>
-                </>
-              ) : null}
+                </Stack>
 
-              {pdfSlot ? (
-                <>
-                  <Divider/>
-                  <Box sx={{minHeight: 320}}>
-                    {pdfSlot}
+                <Box>
+                  <Typography variant="body2" sx={{fontWeight: 700, mb: 0.75}}>
+                    Document Path
+                  </Typography>
+                  <Typography color="text.secondary" sx={{whiteSpace: "pre-wrap"}}>
+                    {hierarchyLabel}
+                  </Typography>
+                </Box>
+
+                {reference.note?.trim() ? (
+                  <Box>
+                    <Typography variant="subtitle2" sx={{fontWeight: 800, mb: 0.75}}>
+                      Note
+                    </Typography>
+                    <Typography sx={{whiteSpace: "pre-wrap"}}>{reference.note}</Typography>
                   </Box>
-                </>
-              ) : null}
-            </Stack>
-          )}
-        </Box>
+                ) : null}
+
+                <Divider/>
+
+                <Box>
+                  <Typography variant="body2" sx={{fontWeight: 700, mb: 1}}>
+                    Content
+                  </Typography>
+                  {renderMarkdown(content)}
+                </Box>
+
+                {extraDetails.length ? (
+                  <>
+                    <Divider/>
+                    <Stack spacing={2}>
+                      {extraDetails}
+                    </Stack>
+                  </>
+                ) : null}
+
+                {pdfSlot ? (
+                  <>
+                    <Divider/>
+                    <Box sx={{minHeight: 320}}>
+                      {pdfSlot}
+                    </Box>
+                  </>
+                ) : null}
+              </Stack>
+            )}
+          </Box>
+        ) : null}
       </CardContent>
     </Card>
   );

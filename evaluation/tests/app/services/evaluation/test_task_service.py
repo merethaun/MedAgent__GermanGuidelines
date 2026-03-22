@@ -1,8 +1,8 @@
+import pytest
 from bson import ObjectId
 
 from app.models.evaluation.run import EvaluationRun
 from app.models.evaluation.task import ManualReviewSubmission
-import pytest
 
 
 def test_task_claim_and_submit_flow(task_service, current_user):
